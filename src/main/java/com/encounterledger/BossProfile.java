@@ -17,6 +17,8 @@ interface BossProfile
     default String replayProjectile(int graphicId) { return null; }
     default boolean observesNpcDamage(int npcId) { return matches(npcId); }
     default boolean includesSpatialNpc(int npcId) { return false; }
+    default boolean hasEncounterArea() { return false; }
+    default boolean containsEncounterTile(net.runelite.api.coords.WorldPoint tile, boolean instanced) { return false; }
 
-    static BossProfile forNpc(int npcId) { return YamaProfile.INSTANCE.matches(npcId) ? YamaProfile.INSTANCE : null; }
+    static BossProfile forNpc(int npcId) { return YamaProfile.INSTANCE.matches(npcId) ? YamaProfile.INSTANCE : ScurriusProfile.INSTANCE.matches(npcId) ? ScurriusProfile.INSTANCE : null; }
 }

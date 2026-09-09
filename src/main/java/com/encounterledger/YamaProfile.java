@@ -7,6 +7,11 @@ final class YamaProfile implements BossProfile
     public String id() { return "yama"; }
     public String name() { return "Yama"; }
     public boolean matches(int npcId) { return npcId == 14176; }
+    public boolean hasEncounterArea() { return true; }
+    // Template region containing the arena, Judge islands and stepping stones.
+    public boolean containsEncounterTile(net.runelite.api.coords.WorldPoint tile, boolean instanced) {
+        return instanced && tile != null && tile.getPlane()==0 && tile.getRegionID()==6045;
+    }
     // Research capture: moving stepping-stone fire spells are non-combat NPCs.
     public boolean includesSpatialNpc(int npcId) { return npcId==13507; }
     public String groundHazard(int graphicId) {

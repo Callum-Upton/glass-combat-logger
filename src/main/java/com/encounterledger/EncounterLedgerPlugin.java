@@ -274,7 +274,7 @@ public class EncounterLedgerPlugin extends Plugin
             {
                 awaitingNextFight = false; encounterBoss = null;
             }
-            if (!awaitingNextFight && npc.getId() == YAMA_ID) encounterBoss = npc;
+            if (!awaitingNextFight && BossProfile.forNpc(npc.getId()) != null) encounterBoss = npc;
         }
         if (awaitingNextFight) return;
         int type = hit.getHitsplatType();
@@ -303,6 +303,7 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Subscribe public void onActorDeath(ActorDeath event)
     {
+        if(encounter!=null && event.getActor()==client.getLocalPlayer()) playerDeathPending=true;
         if (!awaitingNextFight && event.getActor() == encounterBoss) markBossDeath("actor_death");
     }
 
@@ -318,6 +319,16 @@ public class EncounterLedgerPlugin extends Plugin
         if (bossDeathPending || encounterBoss == null) return;
         bossDeathPending = true; deathEvidence = evidence;
         pending.add(object("kind", "boss_death", "recipient", actor(encounterBoss), "sequence", sequence++));
+    }
+
+    private int outsideEncounterTicks;
+    private boolean playerDeathPending;
+    // Null means no reliable area evidence: retain the generic idle fallback.
+    Boolean encounterArea(Player player,BossProfile profile) {
+        if(profile==null || !profile.hasEncounterArea() || player.getWorldView()==null)return null;
+        net.runelite.api.coords.WorldPoint tile=positions.normalise(client,player.getWorldView(),player.getWorldLocation());
+        if(tile==null)return null;
+        return profile.containsEncounterTile(tile,player.getWorldView().isInstance());
     }
 
     private int lastAttackCycle=-1,lastAttackAnimation=-1;
@@ -410,7 +421,7 @@ public class EncounterLedgerPlugin extends Plugin
         }
         if (awaitingNextFight) { capturePreCombat(player,hp,spellState); previousHp = hp; pending.clear(); sequence = 0; return; }
         if (encounterBoss == null && player.getInteracting() instanceof NPC
-            && ((NPC) player.getInteracting()).getId() == YAMA_ID) encounterBoss = (NPC) player.getInteracting();
+            && BossProfile.forNpc(((NPC) player.getInteracting()).getId()) != null) encounterBoss = (NPC) player.getInteracting();
         if (encounterBoss != null && (encounter != null || !pending.isEmpty())
             && (encounterBoss.isDead() || encounterBoss.getHealthRatio() == 0)) markBossDeath("zero_hp_snapshot");
         boolean combatEvent = pending.stream().anyMatch(e -> "damage_done".equals(e.get("kind")) || "damage_taken".equals(e.get("kind")));
@@ -421,6 +432,7 @@ public class EncounterLedgerPlugin extends Plugin
             ticks = new ArrayList<>();
             for(Map<String,Object> buffered:preCombat){buffered.put("tick",ticks.size());ticks.add(buffered);}
             preCombat.clear(); idle = 0;
+            outsideEncounterTicks=0;playerDeathPending=false;
             positions.reset(); projectilePositions.reset(); effectLifecycle.reset();
             encounter = object("schemaVersion", 1, "id", UUID.randomUUID().toString(), "startedAt", Instant.now().toString(),
                 "recorder", object("playerName", player.getName()),
@@ -454,16 +466,20 @@ public class EncounterLedgerPlugin extends Plugin
             ticks.add(snapshot(player,hp,spellState,profile,ticks.size()));
             displayedRecordedTick = ticks.size() - 1;
             tickRecording = true;
-            idle = combatEvent || engaged ? 0 : idle + 1;
-            if (bossDeathPending)
+            Boolean inArea = encounterArea(player,profile);
+            if(Boolean.FALSE.equals(inArea))outsideEncounterTicks++;
+            else if(Boolean.TRUE.equals(inArea))outsideEncounterTicks=0;
+            idle = combatEvent || engaged || Boolean.TRUE.equals(inArea) ? 0 : idle + 1;
+            if (playerDeathPending || hp <= 0) finish("player_death");
+            else if (bossDeathPending)
             {
                 encounter.put("endTick", ticks.size() - 1);
                 encounter.put("endEvidence", deathEvidence);
                 finish("boss_death");
                 awaitingNextFight = true;
             }
-            else if (hp <= 0) finish("player_death");
-            else if (idle >= config.idleTicks()) finish("idle_timeout");
+            else if (outsideEncounterTicks>=3) finish("left_encounter");
+            else if (idle >= config.idleTicks() && !Boolean.FALSE.equals(inArea)) finish("idle_timeout");
             else if (ticks.size() >= 2000) finish("length_limit");
         }
         else {

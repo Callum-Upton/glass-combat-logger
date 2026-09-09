@@ -20,6 +20,8 @@ public class BossBoundaryTest
         });
     }
     static class Capture extends EncounterLedgerPlugin {
+        Boolean area;
+        @Override Boolean encounterArea(Player player,BossProfile profile) { return area; }
         List<Map<String,Object>> saved=new ArrayList<>();
         @Override void saveEncounter(Map<String,Object> log) { saved.add(log); }
     }
@@ -110,5 +112,44 @@ public class BossBoundaryTest
     @Test public void unrelatedYamaDeathDoesNotEndLocalFight()throws Exception {
         Harness h=new Harness();h.hit(h.boss);h.tick();h.plugin.onActorDeath(new ActorDeath(new Enemy(14176).npc));h.tick();
         assertTrue(h.plugin.saved.isEmpty());
+    }
+    @Test public void transitionWithoutCombatSurvivesIdleThenExitEnds()throws Exception {
+        Harness h=new Harness();h.plugin.area=true;h.hit(h.boss);h.tick();h.target=null;
+        for(int i=0;i<80;i++)h.tick();
+        assertTrue(h.plugin.saved.isEmpty());
+        h.plugin.area=false;h.tick();assertTrue(h.plugin.saved.isEmpty());h.tick();h.tick();
+        assertEquals(1,h.plugin.saved.size());assertEquals("left_encounter",h.plugin.saved.get(0).get("endReason"));
+    }
+    @Test public void areaRetentionDoesNotOverrideBossDeath()throws Exception {
+        Harness h=new Harness();h.plugin.area=true;h.hit(h.boss);h.tick();h.target=null;
+        for(int i=0;i<40;i++)h.tick();h.plugin.onActorDeath(new ActorDeath(h.boss.npc));h.tick();
+        for(int i=0;i<16;i++)h.tick();assertEquals("boss_death",h.plugin.saved.get(0).get("endReason"));
+    }
+    @Test public void unknownAreaRetainsIdleFallback()throws Exception {
+        Harness h=new Harness();h.hit(h.boss);h.tick();h.target=null;
+        for(int i=0;i<16;i++)h.tick();assertEquals("idle_timeout",h.plugin.saved.get(0).get("endReason"));
+    }
+    @Test public void delayedPlayerDeathWinsOverExit()throws Exception {
+        Harness h=new Harness();h.plugin.area=true;h.hit(h.boss);h.tick();h.plugin.area=false;h.tick();
+        h.set("playerDeathPending",true);h.tick();assertEquals("player_death",h.plugin.saved.get(0).get("endReason"));
+    }
+    @Test public void scurriusAreaSupportsPublicAndPrivateAndEndsPerKill()throws Exception {
+        assertSame(ScurriusProfile.INSTANCE,BossProfile.forNpc(7221));assertSame(ScurriusProfile.INSTANCE,BossProfile.forNpc(7222));
+        assertTrue(ScurriusProfile.INSTANCE.containsEncounterTile(new WorldPoint(3296,9872,0),true));
+        assertTrue(ScurriusProfile.INSTANCE.containsEncounterTile(new WorldPoint(3296,9872,0),false));
+        assertFalse(ScurriusProfile.INSTANCE.containsEncounterTile(new WorldPoint(3275,9872,0),false));
+        Harness h=new Harness();Enemy rat=new Enemy(7221);h.target=rat.npc;h.plugin.area=true;h.hit(rat);h.tick();h.target=null;
+        for(int i=0;i<40;i++)h.tick();assertTrue(h.plugin.saved.isEmpty());
+        h.plugin.onActorDeath(new ActorDeath(rat.npc));h.tick();assertEquals("boss_death",h.plugin.saved.get(0).get("endReason"));
+        for(int i=0;i<20;i++)h.tick();assertEquals(1,h.plugin.saved.size());
+        Enemy next=new Enemy(7221);h.target=next.npc;h.hit(next);h.tick();h.plugin.onActorDeath(new ActorDeath(next.npc));h.tick();assertEquals(2,h.plugin.saved.size());
+    }
+    @Test public void yamaAreaIncludesJudgeAndRejectsOutsideOrNonInstance() {
+        assertTrue(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(1507,10084,0),true));
+        assertTrue(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(1480,10091,0),true));
+        assertTrue(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(1478,10097,0),true));
+        assertFalse(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(1507,10084,0),false));
+        assertFalse(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(1507,10084,1),true));
+        assertFalse(YamaProfile.INSTANCE.containsEncounterTile(new WorldPoint(3200,3200,0),true));
     }
 }

@@ -37,3 +37,7 @@ All output is beneath RuneLite's user directory, in `encounter-ledger/`. File na
 ## Validation scope
 
 Automated tests cover recording boundaries, pre-roll, timer messages, combat observations, research splitting/file output, combined-capture waiting, and storage rejection. Real Yama solo/duo and Scurrius logs have been used during development. New UI and a fresh installation still require a short in-game smoke test; automated tests cannot establish Plugin Hub approval or every mechanic's attribution accuracy.
+
+## Encounter boundaries
+
+Recognised Yama encounters remain active throughout template region 6045 (instance plane 0), including both Judge islands and stepping stones. Scurrius uses the recorded public/private template bounds x3276–3309, y9857–9878, plane 0. These rules keep an already-started encounter alive; they do not start recording on arena entry. Exiting a recognised area requires three observed outside ticks before saving, allowing delayed local-player death evidence to take precedence. Boss death still ends a kill while inside, so subsequent Scurrius spawns get separate logs. Unknown/unavailable area data retains the configurable idle fallback. Logout and the existing length/storage limits still apply.
