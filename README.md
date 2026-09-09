@@ -10,7 +10,7 @@ The plugin does not upload recordings, contact the website, require an account, 
 2. For research testing, enable **Combined capture** before fighting. Leave standalone **Research mode** off.
 3. Fight normally. Recording starts automatically from observed incoming or outgoing damage, including zero hits. Up to 15 preceding ticks of player state are retained.
 4. Wait for **Log saved** and, with research enabled, **Research saved** messages. A recording-stopped message alone does not mean the file has finished saving.
-5. Click the gold gem in RuneLite's sidebar, then **Open logs folder**.
+5. Click the gold gem in RuneLite's sidebar, then **Copy folder path** and paste it into your file manager.
 
 Regular logs save under `.runelite/encounter-ledger/` in your user home folder. Combined capture groups the encounter JSON, numbered research parts and arena snapshots under `research/<boss>_<date>_<time>_<UUID>/`. Folder times use your computer's local timezone. Existing settings and file paths are preserved from earlier Encounter Ledger / OSRS Glass builds.
 
