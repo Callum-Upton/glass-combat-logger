@@ -5,17 +5,17 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.nio.file.Files;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.nio.file.Path;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.SwingWorker;
+import javax.swing.JTextField;
 import net.runelite.client.ui.PluginPanel;
-import net.runelite.client.util.LinkBrowser;
 
-/** Local file access only: opening the panel never sends or uploads a recording. */
+/** Shows and copies the local recording path without opening external applications. */
 final class LogsPanel extends PluginPanel
 {
     LogsPanel(Path directory)
@@ -27,29 +27,31 @@ final class LogsPanel extends PluginPanel
             + "Your recordings are saved on this computer.<br><br>"
             + "Enable Combined capture in the plugin settings to keep research and fight logs together."
             + "<br><br>Wait for the saved message before sharing a log.</html>"), BorderLayout.NORTH);
-        JButton open = new JButton("Open logs folder");
-        open.setToolTipText(directory.toString());
-        content.add(open, BorderLayout.CENTER);
-        JLabel status = new JLabel(" ");
+        JPanel actions = new JPanel(new BorderLayout(0, 8));
+        JTextField path = new JTextField(directory.toString());
+        path.setEditable(false);
+        path.setToolTipText(directory.toString());
+        path.getAccessibleContext().setAccessibleName("Logs folder path");
+        actions.add(path, BorderLayout.NORTH);
+        JButton copy = new JButton("Copy folder path");
+        actions.add(copy, BorderLayout.CENTER);
+        content.add(actions, BorderLayout.CENTER);
+        JLabel status = new JLabel("<html>Paste this path into your file manager.<br>The folder appears after your first save.</html>");
         content.add(status, BorderLayout.SOUTH);
         add(content, BorderLayout.NORTH);
-        open.addActionListener(event -> {
-            open.setEnabled(false);
-            new SwingWorker<Void, Void>()
+        copy.addActionListener(event -> {
+            try
             {
-                @Override protected Void doInBackground() throws Exception
-                {
-                    Files.createDirectories(directory);
-                    LinkBrowser.open(directory.toString());
-                    return null;
-                }
-                @Override protected void done()
-                {
-                    open.setEnabled(true);
-                    try { get(); status.setText(" "); }
-                    catch (Exception failure) { status.setText("Could not open the logs folder."); }
-                }
-            }.execute();
+                Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(directory.toString()), null);
+                status.setText("Folder path copied.");
+            }
+            catch (RuntimeException failure)
+            {
+                path.requestFocusInWindow();
+                path.selectAll();
+                status.setText("<html>Clipboard unavailable.<br>Copy the selected path manually.</html>");
+            }
         });
     }
 
