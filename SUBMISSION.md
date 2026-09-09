@@ -20,7 +20,7 @@ No Plugin Hub submission has been made by preparing this package. The repository
 ## Short smoke test
 
 - Enable Glass Combat Logger; confirm its gold sidebar gem and recorded-tick overlay appear.
-- Open the sidebar and click **Open logs folder**, including before the first recording has been saved.
+- Open the sidebar and click **Copy folder path**, then paste the result into your file manager. Before the first save the path is available, but the directory may not exist yet.
 - Enable Combined capture with Research mode off. Confirm no research folder appears while waiting out of combat.
 - Record a Yama fight, wait for saved messages, and check the regular log and research files share one folder.
 - Wait between fights: confirm Combined capture does not start a spare recording. Try a second fight and check it gets a separate folder.
@@ -29,7 +29,7 @@ No Plugin Hub submission has been made by preparing this package. The repository
 
 ## Suggested PR description
 
-Glass Combat Logger records local tick-by-tick encounter JSON for post-fight analysis. It includes an optional research recorder for discovering boss mechanics and a sidebar button to open the local logs folder. Research and regular logs can be grouped automatically per encounter.
+Glass Combat Logger records local tick-by-tick encounter JSON for post-fight analysis. It includes an optional research recorder for discovering boss mechanics and a sidebar button to copy the local logs folder path. Research and regular logs can be grouped automatically per encounter.
 
 The plugin performs no automatic uploads or gameplay actions. Research is disabled by default. Capture scope, nearby actor observations, numeric game-variable capture, file limits and known encounter-boundary limitations are documented in REVIEW.md. The companion OSRS Glass website accepts separate user-initiated uploads.
 
