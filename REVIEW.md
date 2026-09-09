@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Glass Combat Logger exports local observations for post-fight analysis. The plugin does not make HTTP requests, upload files, listen on a port, use reflection in production, or automate input. Its only external UI action is a user-clicked folder opener using RuneLite's `LinkBrowser.open`. Test code uses Java proxies/reflection to provide API fakes; the test launcher is not included in the production JAR.
+Glass Combat Logger exports local observations for post-fight analysis. The plugin does not make HTTP requests, upload files, listen on a port, use reflection in production, or automate input. The sidebar only displays the local logs path and copies it to the clipboard on request; it does not open directories or launch external applications. Test code uses Java proxies/reflection to provide API fakes; the test launcher is not included in the production JAR.
 
 There are no account-specific feature switches, subscriptions or tester gates in the plugin. The companion website is a separate service accepting user-initiated uploads for replay, sharing and improving encounter analysis. Research recording is local and optional, not an automatic submission to that service.
 
@@ -12,7 +12,7 @@ There are no account-specific feature switches, subscriptions or tester gates in
 - `ResearchRecorder`: optional independent diagnostics, or diagnostics attached to ordinary encounter boundaries through Combined capture.
 - `ArenaSnapshot`: loaded scene terrain, collision flags, object IDs and instance template coordinates. Snapshots are written locally, not displayed as a live safe-tile overlay.
 - `RecordedTickOverlay`: recording status, tick index and elapsed replay time only.
-- `LogsPanel`: local folder-opening button. Does not start or upload a recording.
+- `LogsPanel`: selectable local folder path and clipboard-copy button. Does not start or upload a recording.
 
 ## Capture and lifecycle
 
