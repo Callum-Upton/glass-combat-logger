@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Glass Combat Logger exports local observations for post-fight analysis. The plugin does not make HTTP requests, upload files, listen on a port, use reflection in production, or automate input. The sidebar only displays the local logs path and copies it to the clipboard on request; it does not open directories or launch external applications. Test code uses Java proxies/reflection to provide API fakes; the test launcher is not included in the production JAR.
+Zenyte exports local observations for post-fight analysis. The plugin does not make HTTP requests, upload files, listen on a port, use reflection in production, or automate input. The sidebar only displays the local logs path and copies it to the clipboard on request; it does not open directories or launch external applications. Test code uses Java proxies/reflection to provide API fakes; the test launcher is not included in the production JAR.
 
 There are no account-specific feature switches, subscriptions or tester gates in the plugin. The companion website is a separate service accepting user-initiated uploads for replay, sharing and improving encounter analysis. Research recording is local and optional, not an automatic submission to that service.
 
 ## Entry points
 
-- `EncounterLedgerPlugin`: ordinary encounter lifecycle, player state, observed combat events and background writer. Automatic incoming/outgoing hitsplat trigger; no arena allowlist in this release.
+- `EncounterLedgerPlugin`: ordinary encounter lifecycle, player state, observed combat events and background writer. Generic incoming/outgoing combat trigger, recognised boss area continuity and CoX raid-message boundaries. Generic encounters are not limited to an arena allowlist.
 - `ResearchRecorder`: optional independent diagnostics, or diagnostics attached to ordinary encounter boundaries through Combined capture.
 - `ArenaSnapshot`: loaded scene terrain, collision flags, object IDs and instance template coordinates. Snapshots are written locally, not displayed as a live safe-tile overlay.
 - `RecordedTickOverlay`: recording status, tick index and elapsed replay time only.
@@ -16,17 +16,17 @@ There are no account-specific feature switches, subscriptions or tester gates in
 
 ## Capture and lifecycle
 
-The ordinary recorder maintains up to 15 ticks of player-state pre-roll while logged in. Only a triggered encounter causes those ticks to be saved. It retains its own equipment/inventory, stats, prayers, buffs, positions, target and combat observations. Yama participant-name observations are included for team classification. Other-player gear is not queried.
+The ordinary recorder maintains up to 15 ticks of player-state pre-roll while logged in. Only a triggered encounter causes those ticks to be saved. It retains its own equipment/inventory, stats, prayers, buffs, positions, target and combat observations. Scoped named participant positions are recorded in recognised Yama, Royal Titans and CoX encounters for replay and future POV alignment; missing or truncated observations are explicit. Other-player gear is not queried.
 
 Research mode is off by default and manually startable. Combined capture is also off by default; when enabled it waits for combat and keeps research alive through the attached encounter, including the final timer-message wait. Standalone research has no arena gate and should be switched off after use. Research observes actors within 48 tiles in the local player's world view, including anonymous other-player animation/hitsplat/graphic references. NPC references contain names and IDs. System/game messages may contain player names. Selected menu actions omit the target text. Raw numeric varps (up to 10,000 initially) and varp/varbit changes are retained for unknown-mechanic discovery and can include unrelated game settings.
 
-Chat capture is limited to game/system message types, excluding player chat channels. No input hooks or credential collection are used. Terrain snapshots include the loaded scene across planes, rather than only the 48-tile actor radius.
+Chat capture is limited to game/system message types, excluding player chat channels. An optional user-configured bookmark hotkey adds a marker to an active recording; it does not start recording or automate gameplay. No credential collection is used. Terrain snapshots include the loaded scene across planes, rather than only the 48-tile actor radius.
 
-All output is beneath RuneLite's user directory, in `encounter-ledger/`. File names use UUIDs, numbered research parts, and sanitised encounter labels. The existing package/config/schema identifiers are retained for compatibility; the public plugin name is Glass Combat Logger.
+All output is beneath RuneLite's user directory, in `encounter-ledger/`. File names use UUIDs, numbered research parts, and sanitised encounter labels. The existing package/config/schema identifiers are retained for compatibility; the public plugin name is Zenyte.
 
 ## Bounds
 
-- Ordinary encounter: at most 2,000 snapshots, plus up to 15 pre-roll snapshots within that count.
+- Ordinary encounter: at most 2,000 snapshots, including up to 15 pre-roll snapshots. Recognised CoX raids allow at most 12,000 snapshots to span the whole raid.
 - Research parts: 30,000 events or 1,000 ticks, then rotate with continuous sequence numbers.
 - Per research scan: at most 128 nearby NPCs and 2,048 unique objects; truncation is explicit. Dense scenes can repeatedly reach the object cap. This is a known coverage limitation, not a claim that every object is captured.
 - Arena snapshot: at most 65,536 tiles and 65,536 deduplicated objects.
@@ -41,3 +41,23 @@ Automated tests cover recording boundaries, pre-roll, timer messages, combat obs
 ## Encounter boundaries
 
 Recognised Yama encounters remain active throughout template region 6045 (instance plane 0), including both Judge islands and stepping stones. Scurrius uses the recorded public/private template bounds x3276–3309, y9857–9878, plane 0. These rules keep an already-started encounter alive; they do not start recording on arena entry. Exiting a recognised area requires three observed outside ticks before saving, allowing delayed local-player death evidence to take precedence. Boss death still ends a kill while inside, so subsequent Scurrius spawns get separate logs. Unknown/unavailable area data retains the configurable idle fallback. Logout and the existing length/storage limits still apply.
+
+
+## Vorkath and generic weapon evidence (prepared update)
+
+The development Vorkath profile covers post-quest NPC 8061, including acid-phase continuity, final timer wait, spawn observations (8063), and acid object snapshots (32000). Instance-template viewport x2255–2289, y4048–4082, plane 0 is conservatively mapped; quest Vorkath is not claimed supported. The shared three-tick exit grace and player-death precedence apply.
+
+Weapon-specific recognition and cooldown code are absent from production. Every non-idle local animation start with an NPC interaction preserves weapon ID/name, attack style, target, tick and client cycle as `attack_observation`. Duplicate callbacks at the same animation/cycle are suppressed. No weapon allowlist controls capture. Website interpretation may identify attacks later, including those from new weapons.
+
+A confirmed standalone divine-drink hit can be excluded from starting a regular fight when corroborated use, a single 10 hit and graphic 560 are present. The event is retained in pre-roll; combat hits or multiple hits still trigger recording. This does not universally identify all self-damage sources.
+
+
+## Next candidate encounter support
+
+Vorkath, Scurrius, Yama and Royal Titans have recognised encounter profiles. CoX uses authoritative raid start/completion messages, raid-area continuity and a longer cap; it preserves room/NPC/effect observations for website interpretation. Royal Titans does not finish when only one Titan becomes inactive. Known instance bounds use template coordinates. Death/exit confirmation and incomplete recordings remain separate outcomes.
+
+Other-player names/positions are observable encounter evidence, not verified account ownership. No other-player equipment is queried. Research actor references remain anonymous except names that can occur in system messages. Capturing an actor or visual does not establish complete mechanic attribution.
+
+## New capture-only profiles
+
+Zulrah (template regions 9007/9008), Duke Sucellus (12132) and Phosani's Nightmare (15515) retain combat-triggered recordings while in their instanced plane-zero arenas. Profiles match observed NPC forms only. Phase deaths/depletion do not end these encounters; boss-specific kill-count messages do. Player death, three-tick arena exit, logout and length/storage limits still terminate recording. Projectile paths and bounded nearby NPC observations are retained; new damage interpretation remains on the website. These new profiles have automated boundary tests, but still require live-client validation of full kills, exits and deaths. Duke preparation before the first combat trigger is not guaranteed to be recorded.

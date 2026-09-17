@@ -50,6 +50,11 @@ final class ResearchRecorder {
         onGameTick(new GameTick());
     }
     String activeFolder() {return session==null?null:sessionFolder;}
+    boolean bookmark(String id) {
+        if(session==null || writeFailed)return false;
+        emit("bookmark",map("bookmarkId",id,"label","Bookmark","evidence","user_hotkey"));
+        return true;
+    }
     void releaseEncounter() {
         combinedEncounter=false;
         stop("encounter_ended");latched=false;
@@ -225,7 +230,7 @@ final class ResearchRecorder {
     @Subscribe public void onGroundObjectDespawned(GroundObjectDespawned e){object("ground_despawn",e.getGroundObject());}
     @Subscribe public void onMenuOptionClicked(MenuOptionClicked e){if(session!=null)emit("action",map("option",text(e.getMenuOption()),"action",e.getMenuAction().name(),"id",e.getId(),"param0",e.getParam0(),"param1",e.getParam1()));}
     @Subscribe public void onVarbitChanged(VarbitChanged e){if(session!=null)emit("variable_changed",map("varpId",e.getVarpId(),"varbitId",e.getVarbitId(),"value",e.getValue()));}
-    @Subscribe public void onChatMessage(ChatMessage e){if(session!=null && (e.getType()==ChatMessageType.GAMEMESSAGE || e.getType()==ChatMessageType.SPAM))emit("game_message",map("text",text(net.runelite.client.util.Text.removeTags(e.getMessage()))));}
+    @Subscribe public void onChatMessage(ChatMessage e){if(session!=null && (e.getType()==ChatMessageType.GAMEMESSAGE || e.getType()==ChatMessageType.SPAM || (e.getType()==ChatMessageType.FRIENDSCHATNOTIFICATION && CoxCapture.recognized(e.getMessage()))))emit("game_message",map("text",text(net.runelite.client.util.Text.removeTags(e.getMessage()))));}
     private void newPart() {
         partStartTick=client.getTickCount();events=new ArrayList<>();
         session=map("format","encounter-ledger-research","schemaVersion",2,"id",UUID.randomUUID().toString(),"sessionId",sessionId,

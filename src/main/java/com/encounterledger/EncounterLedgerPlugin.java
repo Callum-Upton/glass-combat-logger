@@ -19,7 +19,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@PluginDescriptor(name = "Glass Combat Logger", description = "Local tick-by-tick PvM encounter recording", tags = {"combat", "pvm"})
+@PluginDescriptor(name = "Zenyte", description = "Local tick-by-tick PvM encounter recording", tags = {"combat", "pvm"})
 public class EncounterLedgerPlugin extends Plugin
 {
     private static final Logger LOG = LoggerFactory.getLogger(EncounterLedgerPlugin.class);
@@ -35,6 +35,29 @@ public class EncounterLedgerPlugin extends Plugin
     @Inject private Gson gson;
     @Inject private EncounterLedgerConfig config;
     @Inject private ClientThread clientThread;
+    @Inject private net.runelite.client.input.KeyManager keyManager;
+    private net.runelite.client.util.HotkeyListener bookmarkListener;
+    private int lastBookmarkTick=-1;
+    @SuppressWarnings("unchecked")
+    private void addBookmark() {
+        if(storageFailed || client.getGameState()!=GameState.LOGGED_IN || lastBookmarkTick==client.getTickCount())return;
+        boolean regular=encounter!=null && ticks!=null;
+        String id=UUID.randomUUID().toString();
+        boolean diagnostic=research!=null && research.bookmark(id);
+        if(!regular && !diagnostic)return;
+        lastBookmarkTick=client.getTickCount();
+        if(regular){
+            Map<String,Object> mark=object("kind","bookmark","bookmarkId",id,"label","Bookmark","evidence","user_hotkey",
+                "clientTick",client.getTickCount(),"clientCycle",client.getGameCycle(),"sequence",sequence++);
+            // Hotkeys often arrive after this tick's snapshot: attach to that tick,
+            // not the next snapshot, retaining the exact client tick and cycle.
+            Map<String,Object> last=ticks.isEmpty()?null:ticks.get(ticks.size()-1);
+            if(last!=null && Objects.equals(last.get("clientTick"),client.getTickCount()))
+                ((List<Map<String,Object>>)last.get("events")).add(mark);
+            else pending.add(mark);
+        }
+        notifyChat("Bookmark saved.");
+    }
     @Inject private net.runelite.client.eventbus.EventBus eventBus;
     private ResearchRecorder research;
     private ThreadPoolExecutor writer;
@@ -52,6 +75,7 @@ public class EncounterLedgerPlugin extends Plugin
     private static final int YAMA_ID = 14176;
     private NPC encounterBoss;
     private boolean bossDeathPending, awaitingNextFight;
+    private final CoxCapture cox = new CoxCapture();
     private String deathEvidence;
     private final ConsumableTracker consumables = new ConsumableTracker();
     private final Set<Projectile> seenProjectiles = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -125,6 +149,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (profile == null) return;
         int id = event.getNpc().getId();
         mechanic(profile.spawn(id), "npc_spawn", id, event.getNpc());
+        titanActorEvent("npc_spawn",event.getNpc());
     }
 
     @Subscribe public void onOverheadTextChanged(OverheadTextChanged event) {
@@ -140,15 +165,28 @@ public class EncounterLedgerPlugin extends Plugin
     }
 
     @Subscribe public void onChatMessage(ChatMessage event) {
+        Instant messageReceivedAt=Instant.now();
+        if (event.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION && CoxCapture.recognized(event.getMessage())
+            && client.getVarbitValue(CoxCapture.IN_RAID)==1) {
+            cox.message(event.getMessage());
+            KillTiming.observed(cox.timing,messageReceivedAt,client.getTickCount());
+            pending.add(object("kind","raid_message","message",CoxCapture.clean(event.getMessage()),"clientTick",client.getTickCount(),"sequence",sequence++));
+        }
         if (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM) return;
-        if(encounter!=null && bossDeathPending && encounterBoss!=null && encounterBoss.getId()==YAMA_ID) {
+        if(encounter!=null && !awaitingNextFight && profile()!=null && profile().completionMessage(event.getMessage()))
+            markBossDeath("boss_completion_message");
+        if(encounter!=null && !awaitingNextFight && profile()==RoyalTitansProfile.INSTANCE
+            && RoyalTitansProfile.completion(event.getMessage())) markBossDeath("royal_titans_completion_message");
+        if(encounter!=null && bossDeathPending && encounterBoss!=null && profile()!=null) {
             Map<String,Object> timing=KillTiming.parse(net.runelite.client.util.Text.removeTags(event.getMessage()));
+            KillTiming.observed(timing,messageReceivedAt,client.getTickCount());
             if(timing!=null)encounter.put("officialTiming",timing);
         }
         if(awaitingTiming!=null && client.getTickCount()<=timingDeadline) {
             String candidate=net.runelite.client.util.Text.removeTags(event.getMessage());
             if(candidate.startsWith("Fight duration:"))awaitingTiming.put("timingMessageObserved",candidate);
             Map<String,Object> timing=KillTiming.parse(net.runelite.client.util.Text.removeTags(event.getMessage()));
+            KillTiming.observed(timing,messageReceivedAt,client.getTickCount());
             if(timing!=null){awaitingTiming.put("officialTiming",timing);flushTiming();}
         }
         BossProfile profile = profile();
@@ -209,8 +247,13 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Override protected void startUp()
     {
+        lastBookmarkTick=-1; cox.reset();
+        bookmarkListener=new net.runelite.client.util.HotkeyListener(()->config.bookmarkHotkey()) {
+            @Override public void hotkeyPressed(){clientThread.invoke(()->addBookmark());}
+        };
+        keyManager.registerKeyListener(bookmarkListener);
         logsNavigation = net.runelite.client.ui.NavigationButton.builder()
-            .tooltip("Glass Combat Logger").icon(LogsPanel.icon()).priority(8)
+            .tooltip("Zenyte").icon(LogsPanel.icon()).priority(8)
             .panel(new LogsPanel(RuneLite.RUNELITE_DIR.toPath().resolve("encounter-ledger"))).build();
         clientToolbar.addNavigation(logsNavigation);
         storageFailed = false;
@@ -228,6 +271,7 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Override protected void shutDown()
     {
+        if(bookmarkListener!=null){keyManager.unregisterKeyListener(bookmarkListener);bookmarkListener=null;}
         if (logsNavigation != null) { clientToolbar.removeNavigation(logsNavigation); logsNavigation = null; }
         if (recordedTickOverlay != null) { overlayManager.remove(recordedTickOverlay); recordedTickOverlay = null; }
         if(research!=null){eventBus.unregister(research);research.stop("plugin_disabled");research=null;}
@@ -270,6 +314,7 @@ public class EncounterLedgerPlugin extends Plugin
         {
             NPC npc = (NPC) recipient;
             if (awaitingNextFight && npc == encounterBoss) return;
+            if (awaitingNextFight && encounterBoss!=null && ScurriusProfile.INSTANCE.matches(encounterBoss.getId()) && npc.getId()==7223) return;
             if (awaitingNextFight && !npc.isDead() && npc.getId() != 14179 && npc.getId() != 14180)
             {
                 awaitingNextFight = false; encounterBoss = null;
@@ -281,7 +326,9 @@ public class EncounterLedgerPlugin extends Plugin
         String kind = type == HitsplatID.HEAL ? "healing_hitsplat" :
             CombatMath.isHpDamage(type, hit.isMine(), hit.isOthers()) ? (self ? "damage_taken" : hit.isMine() ? "damage_done" : "other_damage") : "unclassified_hitsplat";
         if(encounter==null&&client.getLocalPlayer().isDead())return;
-        if(research!=null&&config.combinedCapture()&&research.activeSessionId()==null&&("damage_taken".equals(kind)||"damage_done".equals(kind)))
+        if(research!=null&&config.combinedCapture()&&research.activeSessionId()==null
+            &&!(self&&hit.getAmount()==10&&(consumables.hasDivineAttempt()||RecordingTrigger.divineUse(pending)))
+            &&("damage_taken".equals(kind)||"damage_done".equals(kind)))
             research.beginEncounter(encounterBoss!=null?encounterBoss.getName():recipient instanceof NPC?recipient.getName():client.getLocalPlayer().getInteracting() instanceof NPC?client.getLocalPlayer().getInteracting().getName():"PvM");
         Map<String,Object> damageEvent=object("kind", kind, "amount", hit.getAmount(), "hitsplatType", type, "recipient", actor(recipient),
             "ownership", self ? "incoming_source_unknown" : hit.isMine() ? "local_player" : "unattributed", "sequence", sequence++);
@@ -303,20 +350,32 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Subscribe public void onActorDeath(ActorDeath event)
     {
-        if(encounter!=null && event.getActor()==client.getLocalPlayer()) playerDeathPending=true;
+        if(encounter!=null && event.getActor()==client.getLocalPlayer()) {
+            playerDeathPending=true;
+            pending.add(object("kind","player_death","clientTick",client.getTickCount(),"sequence",sequence++));
+        }
         if (!awaitingNextFight && event.getActor() == encounterBoss) markBossDeath("actor_death");
     }
 
     @Subscribe public void onNpcDespawned(NpcDespawned event)
     {
+        titanActorEvent("npc_despawn",event.getNpc());
         // A despawn alone may mean a phase transition, teleport or disconnect, not a kill.
         if (!awaitingNextFight && event.getNpc() == encounterBoss
             && (encounterBoss.isDead() || encounterBoss.getHealthRatio() == 0)) markBossDeath("dead_npc_despawn");
     }
 
+    private void titanActorEvent(String kind,NPC npc) {
+        if(encounter!=null && profile()==RoyalTitansProfile.INSTANCE && RoyalTitansProfile.INSTANCE.includesSpatialNpc(npc.getId()))
+            pending.add(object("kind","npc_lifecycle","phase",kind,"npcId",npc.getId(),"npcIndex",npc.getIndex(),
+                "position",positions.position(client,npc),"clientTick",client.getTickCount(),"clientCycle",client.getGameCycle(),"sequence",sequence++));
+    }
+
     private void markBossDeath(String evidence)
     {
         if (bossDeathPending || encounterBoss == null) return;
+        if(profile()==RoyalTitansProfile.INSTANCE && !"royal_titans_completion_message".equals(evidence)) return;
+        if(profile()!=null && profile().requiresCompletionMessage() && !"boss_completion_message".equals(evidence))return;
         bossDeathPending = true; deathEvidence = evidence;
         pending.add(object("kind", "boss_death", "recipient", actor(encounterBoss), "sequence", sequence++));
     }
@@ -332,28 +391,25 @@ public class EncounterLedgerPlugin extends Plugin
     }
 
     private int lastAttackCycle=-1,lastAttackAnimation=-1;
-    private void recordAttackCue(Player player) {
+    private void recordAttackObservation(Player player) {
         int animation=player.getAnimation(),cycle=client.getGameCycle();
         if(storageFailed||!(player.getInteracting() instanceof NPC))return;
         if(cycle==lastAttackCycle&&animation==lastAttackAnimation)return;
         ItemContainer gear=client.getItemContainer(InventoryID.EQUIPMENT);
         Item weapon=gear==null?null:gear.getItem(3);
         int id=weapon==null?-1:weapon.getId();String name=id<0?"Unarmed":client.getItemDefinition(id).getName();
-        if(!AttackTiming.cue(animation,name))return;
+        if(animation<0)return;
         lastAttackCycle=cycle;lastAttackAnimation=animation;
-        int delay=AttackTiming.delay(animation,name);
-        WeaponProfiles.Attack weaponAttack=WeaponProfiles.find(name,animation);
-        Map<String,Object> cue=object("kind","attack_cue","label",name+" attack cue","category","attack","animationId",animation,"clientCycle",cycle,"clientTick",client.getTickCount(),"weaponName",name,"attackStyle",client.getVarpValue(43),"recipient",actor(player.getInteracting()),"evidence","local_attack_animation_start","confidence","observed_animation","sequence",sequence++);
+        // Capture evidence even for weapons/animations released after this plugin version.
+        Map<String,Object> cue=object("kind","attack_observation","label",name+" animation","category","observation","animationId",animation,"clientCycle",cycle,"clientTick",client.getTickCount(),"weaponName",name,"attackStyle",client.getVarpValue(43),"recipient",actor(player.getInteracting()),"evidence","local_animation_start_with_npc_target","confidence","raw_observation","sequence",sequence++);
         if(id>=0)cue.put("itemId",id);
-        if(weaponAttack!=null)cue.put("label",name+" "+weaponAttack.kind);
-        if(delay>0)cue.put("attackDelayTicks",delay);
         pending.add(cue);
     }
     @Subscribe public void onAnimationChanged(AnimationChanged event)
     {
         if (event.getActor() == client.getLocalPlayer()) {
             pending.add(object("kind", "animation", "animationId", event.getActor().getAnimation(), "sequence", sequence++));
-            recordAttackCue(client.getLocalPlayer());
+            recordAttackObservation(client.getLocalPlayer());
         }
         else if (event.getActor() instanceof NPC && profile() != null) {
             NPC npc = (NPC) event.getActor();
@@ -366,7 +422,7 @@ public class EncounterLedgerPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING || event.getGameState() == GameState.CONNECTION_LOST)
         {
-            finish(event.getGameState().name().toLowerCase(Locale.ROOT)); flushTiming(); pending.clear(); preCombat.clear(); previousHp = -1;
+            finish(event.getGameState().name().toLowerCase(Locale.ROOT)); cox.reset(); flushTiming(); pending.clear(); preCombat.clear(); previousHp = -1;
             consumables.clear(); seenProjectiles.clear(); seenGraphics.clear();
             spells.reset(); seenSpellGraphics.clear(); previousVengeance=-1;vengeanceTarget=null;targetVengeanceConfirmed=false;vengeanceOverhead=false;previousSpellState=null;
             encounterBoss = null; bossDeathPending = false; awaitingNextFight = false;
@@ -401,6 +457,12 @@ public class EncounterLedgerPlugin extends Plugin
         seenProjectiles.removeIf(projectile -> projectile.getEndCycle() < client.getGameCycle());
         seenGraphics.values().removeIf(start -> start < client.getGameCycle() - 1200);
         if (player == null || client.getGameState() != GameState.LOGGED_IN || storageFailed) { pending.clear(); preCombat.clear(); return; }
+        Boolean raidStart=cox.poll(client.getVarbitValue(CoxCapture.IN_RAID)==1,client.getVarbitValue(CoxCapture.RAID_STATE));
+        if(raidStart!=null) {
+            // Finish an unrelated generic recording before opening the raid session.
+            if(encounter!=null) { finish("raid_started"); cox.active=true; }
+            awaitingNextFight=false; encounterBoss=null; bossDeathPending=false;
+        }
         int hp = client.getBoostedSkillLevel(Skill.HITPOINTS);
         int vengeance=client.getVarbitValue(2450);
         if(vengeanceOverhead && (previousVengeance>0 || pending.stream().anyMatch(e->"player_spell".equals(e.get("kind")) && ("vengeance".equals(e.get("spellId")) || "vengeance_other".equals(e.get("spellId"))))))
@@ -415,6 +477,7 @@ public class EncounterLedgerPlugin extends Plugin
         seenSpellGraphics.values().removeIf(start->start<client.getGameCycle()-1200);
         if (awaitingNextFight && player.getInteracting() instanceof NPC
             && player.getInteracting() != encounterBoss && !player.getInteracting().isDead()
+            && !(encounterBoss!=null && ScurriusProfile.INSTANCE.matches(encounterBoss.getId()) && ((NPC)player.getInteracting()).getId()==7223)
             && ((NPC) player.getInteracting()).getId() != 14179 && ((NPC) player.getInteracting()).getId() != 14180)
         {
             awaitingNextFight = false; encounterBoss = null;
@@ -426,7 +489,8 @@ public class EncounterLedgerPlugin extends Plugin
             && (encounterBoss.isDead() || encounterBoss.getHealthRatio() == 0)) markBossDeath("zero_hp_snapshot");
         boolean combatEvent = pending.stream().anyMatch(e -> "damage_done".equals(e.get("kind")) || "damage_taken".equals(e.get("kind")));
         boolean engaged = player.getInteracting() instanceof NPC && !player.getInteracting().isDead();
-        if (encounter == null && combatEvent)
+        if(encounter==null&&RecordingTrigger.onlyDivineDamage(pending))combatEvent=false;
+        if (encounter == null && (raidStart!=null || (combatEvent && client.getVarbitValue(CoxCapture.IN_RAID)!=1)))
         {
             flushTiming();observedParticipants.clear();
             ticks = new ArrayList<>();
@@ -438,8 +502,14 @@ public class EncounterLedgerPlugin extends Plugin
                 "recorder", object("playerName", player.getName()),
                 "tickDurationMs", 600, "label", encounterBoss != null ? encounterBoss.getName() : player.getInteracting() instanceof NPC ? player.getInteracting().getName() : "PvM encounter", "ticks", ticks,
                 "combatStartTick",ticks.size(), "preCombatTicks",ticks.size(),
-                "timingBasis", "first_observed_damage_tick", "captureFeatures", Arrays.asList("attack_cues_v1", "shared_buffs_v1", "boss_events_v1", "item_use_v1", "player_spells_v1", "positions_v1", "glyph_positions_v1", "ground_hazards_v1", "projectile_paths_v1", "damage_cues_v1", "effect_lifecycle_v1", "actor_visual_snapshots_v1", "hazard_observations_at_hit_v1"));
+                "timingBasis", "first_observed_damage_tick", "captureFeatures", Arrays.asList("attack_observations_v1", "shared_buffs_v1", "boss_events_v1", "item_use_v1", "player_spells_v1", "positions_v1", "named_participant_positions_v1", "glyph_positions_v1", "ground_hazards_v1", "projectile_paths_v1", "damage_cues_v1", "effect_lifecycle_v1", "actor_visual_snapshots_v1", "hazard_observations_at_hit_v1"));
             if(!ticks.isEmpty())encounter.put("startedAt",ticks.get(0).get("observedAt"));
+            if(raidStart!=null) {
+                encounter.put("label","Chambers of Xeric");
+                encounter.put("boss",object("id","cox","name","Chambers of Xeric","profileVersion",1));
+                encounter.put("raidCapture",object("version",1,"startObserved",raidStart,"startClientTick",client.getTickCount()));
+                encounter.put("timingBasis",raidStart ? "raid_start_signal" : "partial_raid_observation");
+            }
             notifyChat("Recording started.");
         }
         if (encounter != null)
@@ -459,18 +529,31 @@ public class EncounterLedgerPlugin extends Plugin
                 }
             }
             BossProfile profile = profile();
-            if (profile != null) {
+            if (profile != null && !cox.active) {
                 encounter.put("boss", object("id", profile.id(), "name", profile.name(), "npcId", encounterBoss.getId(), "profileVersion", 1));
                 encounter.put("label", profile.name());
             }
             ticks.add(snapshot(player,hp,spellState,profile,ticks.size()));
+            if(cox.active)ticks.get(ticks.size()-1).put("raidState",object("inRaid",client.getVarbitValue(CoxCapture.IN_RAID),"state",client.getVarbitValue(CoxCapture.RAID_STATE)));
             displayedRecordedTick = ticks.size() - 1;
             tickRecording = true;
-            Boolean inArea = encounterArea(player,profile);
+            Boolean inArea = cox.active ? Boolean.valueOf(client.getVarbitValue(CoxCapture.IN_RAID)==1) : encounterArea(player,profile);
             if(Boolean.FALSE.equals(inArea))outsideEncounterTicks++;
             else if(Boolean.TRUE.equals(inArea))outsideEncounterTicks=0;
             idle = combatEvent || engaged || Boolean.TRUE.equals(inArea) ? 0 : idle + 1;
-            if (playerDeathPending || hp <= 0) finish("player_death");
+            if(cox.active) {
+                if(cox.layout!=null)encounter.put("raidLayout",cox.layout);
+                if(cox.complete) {
+                    encounter.put("officialTiming",cox.timing);
+                    encounter.put("endTick",ticks.size()-1);
+                    encounter.put("endEvidence","cox_completion_message");
+                    finish("raid_complete");
+                } else if(outsideEncounterTicks>=3) finish(playerDeathPending ? "player_death_exit" : "left_raid");
+                else if(ticks.size()>=12000) finish("length_limit");
+                // Death inside Chambers is recoverable; retain the event, not a terminal flag.
+                if(Boolean.TRUE.equals(inArea))playerDeathPending=false;
+            }
+            else if (playerDeathPending || hp <= 0) finish("player_death");
             else if (bossDeathPending)
             {
                 encounter.put("endTick", ticks.size() - 1);
@@ -505,7 +588,7 @@ public class EncounterLedgerPlugin extends Plugin
             for (Skill skill : Skill.values()) if (skill != Skill.OVERALL) skills.put(skill.name(), object("base", client.getRealSkillLevel(skill), "boosted", client.getBoostedSkillLevel(skill)));
             effectLifecycle.scan(client,player);
             return object("tick", tickIndex, "clientTick", client.getTickCount(), "observedAt", Instant.now().toString(),
-                "effectLifecycle",effectLifecycle.drain(), "hp", hp, "projectilePaths",projectilePositions.snapshot(client,player,profile), "observedHazardProtection",hazards.protections(client,player,profile), "groundHazards",hazards.snapshot(client,player,profile),"spatial",positions.snapshot(client,player,profile),"spellState",spellState,"maxHp", client.getRealSkillLevel(Skill.HITPOINTS), "prayer", client.getBoostedSkillLevel(Skill.PRAYER),
+                "effectLifecycle",effectLifecycle.drain(), "hp", hp, "projectilePaths",projectilePositions.snapshot(client,player,profile,cox.active), "observedHazardProtection",hazards.protections(client,player,profile), "groundHazards",hazards.snapshot(client,player,profile),"spatial",positions.snapshot(client,player,profile),"spellState",spellState,"maxHp", client.getRealSkillLevel(Skill.HITPOINTS), "prayer", client.getBoostedSkillLevel(Skill.PRAYER),
                 "runEnergy", client.getEnergy(), "specialAttack", client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT),
                 "animationId", player.getAnimation(), "position", object("x", player.getWorldLocation().getX(), "y", player.getWorldLocation().getY(), "plane", player.getWorldLocation().getPlane()),
                 "target", actor(player.getInteracting()), "equipment", items(InventoryID.EQUIPMENT), "inventory", items(InventoryID.INVENTORY),
@@ -521,6 +604,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (!pending.isEmpty() && !reason.equals("idle_timeout") && !reason.equals("player_death") && !reason.equals("length_limit") && !reason.equals("boss_death"))
             encounter.put("trailingEvents", new ArrayList<>(pending));
         Map<String, Object> completed = encounter; encounter = null; ticks = null;
+        if(completed.containsKey("raidCapture"))cox.ended();
         tickRecording = false;
         completed.put("trailingEffectLifecycle", effectLifecycle.drain());
         effectLifecycle.reset();
@@ -529,7 +613,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (!reason.equals("boss_death")) encounterBoss = null;
         notifyChat("Recording stopped (" + reason.replace('_', ' ') + "). Saving "
             + ((List<?>) completed.get("ticks")).size() + " ticks...");
-        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && "yama".equals(((Map<?,?>)completed.get("boss")).get("id"))) {
+        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && Arrays.asList("yama","vorkath","royal_titans","zulrah","duke","phosanis_nightmare").contains(((Map<?,?>)completed.get("boss")).get("id"))) {
             flushTiming();awaitingTiming=completed;timingDeadline=client.getTickCount()+15;
         } else saveEncounter(completed);
         if(awaitingTiming!=completed && completed.containsKey("researchSessionId")&&research!=null)research.releaseEncounter();
@@ -545,16 +629,16 @@ public class EncounterLedgerPlugin extends Plugin
                     Path directory = encounterDirectory(RuneLite.RUNELITE_DIR.toPath().resolve("encounter-ledger"),completed);
                     Files.createDirectories(directory);
                     Path temporary = directory.resolve(completed.get("id") + ".tmp");
-                    Path destination = directory.resolve(completed.get("id") + ".json");
+                    Path destination = directory.resolve(RecordingFolder.logFile(completed));
                     Files.write(temporary, gson.toJson(completed).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW);
                     try { Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE); }
                     catch (AtomicMoveNotSupportedException ex) { Files.move(temporary, destination); }
-                    notifyChat("Log saved: " + (completed.containsKey("researchSessionId") ? "research/"+completed.getOrDefault("researchFolder",completed.get("researchSessionId"))+"/" : "") + destination.getFileName() + ". Ready to import into OSRS Glass.");
+                    notifyChat("Log saved: " + (completed.containsKey("researchSessionId") ? "research/"+completed.getOrDefault("researchFolder",completed.get("researchSessionId"))+"/" : "") + destination.getFileName() + ". Ready to import into Zenyte.");
                 }
-                catch (Exception ex) { storageFailed = true; LOG.error("Glass Combat Logger could not save a log; recording paused until plugin restart", ex); notifyChat("Could not save the log. Recording paused; check your RuneLite log and restart the plugin after fixing storage."); }
+                catch (Exception ex) { storageFailed = true; LOG.error("Zenyte could not save a log; recording paused until plugin restart", ex); notifyChat("Could not save the log. Recording paused; check your RuneLite log and restart the plugin after fixing storage."); }
             });
         }
-        catch (RejectedExecutionException ex) { storageFailed = true; LOG.error("Glass Combat Logger save queue full; recording paused", ex); notifyChat("Save queue full. This log could not be saved; recording paused."); }
+        catch (RejectedExecutionException ex) { storageFailed = true; LOG.error("Zenyte save queue full; recording paused", ex); notifyChat("Save queue full. This log could not be saved; recording paused."); }
     }
 
     static Path encounterDirectory(Path root,Map<String,Object> completed) {
@@ -565,7 +649,7 @@ public class EncounterLedgerPlugin extends Plugin
     private void notifyChat(String message)
     {
         // Save callbacks run off-thread; all client access must return to the client thread.
-        Runnable notify = () -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[Glass Combat Logger] " + message, null);
+        Runnable notify = () -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "[Zenyte] " + message, null);
         if (client.isClientThread()) notify.run();
         else clientThread.invokeLater(notify);
     }

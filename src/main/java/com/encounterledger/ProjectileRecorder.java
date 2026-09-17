@@ -15,12 +15,15 @@ final class ProjectileRecorder {
         Map<String,Object> result=new LinkedHashMap<>();result.put("x",p.getX());result.put("y",p.getY());result.put("plane",p.getPlane());return result;
     }
     List<Map<String,Object>> snapshot(Client client,Player player,BossProfile profile) {
+        return snapshot(client,player,profile,false);
+    }
+    List<Map<String,Object>> snapshot(Client client,Player player,BossProfile profile,boolean raidCapture) {
         List<Map<String,Object>> result=new ArrayList<>();
-        if(profile==null || player==null || player.getWorldView()!=client.getTopLevelWorldView() || client.getProjectiles()==null)return result;
+        if((profile==null&&!raidCapture) || player==null || player.getWorldView()!=client.getTopLevelWorldView() || client.getProjectiles()==null)return result;
         int cycle=client.getGameCycle();
         identities.keySet().removeIf(p->p.getEndCycle()<cycle);
         for(Projectile p:client.getProjectiles()) {
-            String type=profile.replayProjectile(p.getId());
+            String type=profile==null?null:profile.replayProjectile(p.getId());
             if(type==null)type="unclassified_projectile";
             if(p.getStartCycle()>cycle || p.getEndCycle()<cycle)continue;
             WorldView view=player.getWorldView();

@@ -28,7 +28,7 @@ final class RecordedTickOverlay extends OverlayPanel
         if (!config.showRecordedTick()) return null;
         int tick = plugin.displayedRecordedTick();
         panelComponent.getChildren().add(LineComponent.builder()
-            .left("Glass Combat Logger")
+            .left("Zenyte")
             .right(tick < 0 ? "Waiting" : plugin.tickRecording() ? "Recording" : "Stopped")
             .rightColor(plugin.tickRecording() ? Color.GREEN : Color.LIGHT_GRAY).build());
         if (tick >= 0)

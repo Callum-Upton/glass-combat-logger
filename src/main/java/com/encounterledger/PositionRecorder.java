@@ -8,6 +8,7 @@ import net.runelite.api.coords.*;
 final class PositionRecorder {
     private final Map<NPC,Integer> identities = new IdentityHashMap<>();
     private int nextIdentity;
+    private final Map<String,Integer> participantIds=new HashMap<>();
     private static Map<String,Object> map(Object... fields) {
         Map<String,Object> result=new LinkedHashMap<>();
         for(int i=0;i<fields.length;i+=2)result.put((String)fields[i],fields[i+1]);
@@ -34,12 +35,16 @@ final class PositionRecorder {
     Map<String,Object> snapshot(Client client,Player player,BossProfile profile) {
         List<Map<String,Object>> npcs=new ArrayList<>();
         List<NPC> visible=client.getNpcs();
+        // Scaled raid NPCs can report level zero. Capture the loaded raid actors
+        // independently of target selection; the usual view/range/cap checks still apply.
+        boolean activeRaid=client.getVarbitValue(CoxCapture.IN_RAID)==1
+            && client.getVarbitValue(CoxCapture.RAID_STATE)>0;
         boolean truncated=false;
         if(visible!=null) for(NPC npc:visible) {
             if(npc.getWorldView()!=player.getWorldView() || npc.getWorldLocation()==null || player.getWorldLocation()==null
                 || npc.getWorldLocation().distanceTo(player.getWorldLocation())>48)continue;
             // Include combat NPCs plus Yama's encounter actors; omit decorative non-combat NPCs.
-            if(npc.getCombatLevel()<=0 && npc.getId()!=14176 && npc.getId()!=14179 && npc.getId()!=14180 && npc!=player.getInteracting()
+            if(!activeRaid && npc.getCombatLevel()<=0 && npc.getId()!=14176 && npc.getId()!=14179 && npc.getId()!=14180 && npc!=player.getInteracting()
                 && (profile==null || !profile.includesSpatialNpc(npc.getId())))continue;
             Map<String,Object> position=position(client,npc);
             if(position==null)continue;
@@ -64,8 +69,29 @@ final class PositionRecorder {
         }
         Map<String,Object> result=map("coordinateSystem","instance_template","player",position(client,player),"npcs",npcs,"truncated",truncated);
         result.put("playerVisuals",ActorVisualSnapshot.capture(player,client.getGameCycle()));
+        if(participantScope(client,player,profile)) {
+            List<Map<String,Object>> participants=new ArrayList<>();boolean clipped=false;
+            if(client.getPlayers()!=null)for(Player other:client.getPlayers()) {
+                if(other==player||other.getName()==null||other.getWorldView()!=player.getWorldView()||other.getWorldLocation()==null||other.getWorldLocation().distanceTo(player.getWorldLocation())>48)continue;
+                Map<String,Object> tile=position(client,other);if(tile==null)continue;
+                if(profile!=null && profile.hasEncounterArea() && !profile.containsEncounterTile(normalise(client,other.getWorldView(),other.getWorldLocation()),other.getWorldView().isInstance()))continue;
+                if(participants.size()>=100){clipped=true;break;}
+                String displayName=net.runelite.client.util.Text.removeTags(other.getName()).replace('\u00a0',' ').replace('_',' ').trim();
+                if(displayName.isEmpty() || displayName.length()>64)continue;
+                String name=displayName.toLowerCase(Locale.ROOT);
+                if(!participantIds.containsKey(name)&&participantIds.size()>=100){clipped=true;continue;}
+                int id=participantIds.computeIfAbsent(name,k->participantIds.size()+2);
+                participants.add(map("identity",id,"name",displayName,"position",tile));
+            }
+            result.put("players",participants);result.put("playersTruncated",clipped);
+            result.put("participantCapture", "visible_encounter_players_v1");
+        }
         List<Map<String,Object>> glyphs=glyphs(client,player);
         if(glyphs!=null)result.put("glyphs",glyphs);
+        if(profile==VorkathProfile.INSTANCE) {
+            List<Map<String,Object>> acid=acidPools(client,player);
+            if(acid!=null)result.put("acidPools",acid);
+        }
         return result;
     }
     static String glyphState(int id) {
@@ -110,5 +136,31 @@ final class PositionRecorder {
         }
         return result;
     }
-    void reset() {identities.clear();nextIdentity=0;}
+    private List<Map<String,Object>> acidPools(Client client,Player player) {
+        WorldView view=player.getWorldView();
+        WorldPoint p=normalise(client,view,player.getWorldLocation());
+        if(view==null||!VorkathProfile.INSTANCE.containsEncounterTile(p,view.isInstance())||view.getScene()==null)return null;
+        Tile[][][] tiles=view.getScene().getTiles();int plane=player.getWorldLocation().getPlane();
+        if(tiles==null||plane<0||plane>=tiles.length)return null;
+        List<Map<String,Object>> result=new ArrayList<>();
+        Set<TileObject> seen=Collections.newSetFromMap(new IdentityHashMap<>());
+        for(Tile[] row:tiles[plane])if(row!=null)for(Tile tile:row)if(tile!=null){
+            List<TileObject> objects=new ArrayList<>();objects.add(tile.getGroundObject());
+            if(tile.getGameObjects()!=null)Collections.addAll(objects,tile.getGameObjects());
+            for(TileObject object:objects){
+                if(object==null||object.getId()!=32000||!seen.add(object))continue;
+                WorldPoint point=normalise(client,view,object.getWorldLocation());
+                if(!VorkathProfile.INSTANCE.containsEncounterTile(point,true))continue;
+                result.add(map("x",point.getX(),"y",point.getY(),"plane",point.getPlane()));
+                if(result.size()>256)return null;
+            }
+        }
+        return result;
+    }
+    private boolean participantScope(Client client,Player player,BossProfile profile) {
+        if(player==null||player.getWorldView()==null||player.getWorldLocation()==null)return false;
+        if(profile==YamaProfile.INSTANCE || profile==ScurriusProfile.INSTANCE || profile==RoyalTitansProfile.INSTANCE)return profile.containsEncounterTile(normalise(client,player.getWorldView(),player.getWorldLocation()),player.getWorldView().isInstance());
+        return client.getVarbitValue(CoxCapture.IN_RAID)==1 && client.getVarbitValue(CoxCapture.RAID_STATE)>0;
+    }
+    void reset() {identities.clear();nextIdentity=0;participantIds.clear();}
 }

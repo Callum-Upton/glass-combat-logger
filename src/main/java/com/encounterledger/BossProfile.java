@@ -3,6 +3,8 @@ package com.encounterledger;
 /** Boss rules are opt-in by NPC ID; unknown encounters never inherit another boss's rules. */
 interface BossProfile
 {
+    default boolean completionMessage(String text) { return false; }
+    default boolean requiresCompletionMessage() { return false; }
     String id();
     String name();
     boolean matches(int npcId);
@@ -20,5 +22,5 @@ interface BossProfile
     default boolean hasEncounterArea() { return false; }
     default boolean containsEncounterTile(net.runelite.api.coords.WorldPoint tile, boolean instanced) { return false; }
 
-    static BossProfile forNpc(int npcId) { return YamaProfile.INSTANCE.matches(npcId) ? YamaProfile.INSTANCE : ScurriusProfile.INSTANCE.matches(npcId) ? ScurriusProfile.INSTANCE : null; }
+    static BossProfile forNpc(int npcId) { return YamaProfile.INSTANCE.matches(npcId) ? YamaProfile.INSTANCE : ScurriusProfile.INSTANCE.matches(npcId) ? ScurriusProfile.INSTANCE : VorkathProfile.INSTANCE.matches(npcId) ? VorkathProfile.INSTANCE : RoyalTitansProfile.INSTANCE.matches(npcId) ? RoyalTitansProfile.INSTANCE : ResearchBossProfile.forNpc(npcId); }
 }

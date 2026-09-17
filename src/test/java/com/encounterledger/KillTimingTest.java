@@ -2,6 +2,13 @@ package com.encounterledger;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class KillTimingTest {
+ @Test public void recordsFirstUtcMessageArrivalSeparatelyFromDuration(){
+  java.util.Map<String,Object> timing=KillTiming.parse("Fight duration: 1:00");
+  java.time.Instant at=java.time.Instant.parse("2026-09-11T12:00:00.123Z");
+  KillTiming.observed(timing,at,100);KillTiming.observed(timing,at.plusSeconds(1),102);
+  assertEquals("2026-09-11T12:00:00.123Z",timing.get("receivedAt"));assertEquals(100,timing.get("receivedClientTick"));assertEquals(60000,timing.get("durationMs"));
+  KillTiming.observed(null,at,100);
+ }
  @Test public void stripsGameColourTokens(){assertEquals(411600,KillTiming.parse("Fight duration: @red@6:51.60</col>. Personal best: 2:54.60").get("durationMs"));}
  @Test public void capturesDurationNotPersonalBest(){assertEquals(395400,KillTiming.parse("Fight duration: 6:35.40. Personal best: 2:54.60").get("durationMs"));}
  @Test public void acceptsPersonalBestAndRetainsPrecision(){assertEquals(180600,KillTiming.parse("Fight duration: 3:00.6 (new personal best)").get("durationMs"));assertEquals(1000,KillTiming.parse("Fight duration: 3:00. Personal best: 2:54").get("precisionMs"));}

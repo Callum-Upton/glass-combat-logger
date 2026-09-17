@@ -10,6 +10,7 @@ final class ScurriusProfile implements BossProfile {
     public boolean containsEncounterTile(net.runelite.api.coords.WorldPoint p,boolean instanced){
         return p!=null && p.getPlane()==0 && p.getX()>=3276 && p.getX()<=3309 && p.getY()>=9857 && p.getY()<=9878;
     }
+    public String groundHazard(int graphicId){return graphicId==2644?"rock_impact":null;}
     public String[] animation(int npcId,int animationId){return null;}
     public String[] projectile(int graphicId){return null;}
     public String[] spawn(int npcId){return null;}

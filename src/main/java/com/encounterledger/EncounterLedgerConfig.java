@@ -5,6 +5,8 @@ import net.runelite.client.config.*;
 @ConfigGroup("encounterledger")
 public interface EncounterLedgerConfig extends Config
 {
+    @ConfigItem(keyName="bookmarkHotkey", name="Bookmark hotkey", description="Mark the current tick during a recording. Choose an unused key combination; bookmarks do not start recordings.")
+    default Keybind bookmarkHotkey() { return Keybind.NOT_SET; }
     @ConfigItem(keyName="combinedCapture", name="Combined capture", description="Automatically group each encounter log with research parts and arena snapshots. Research starts with combat, uses a boss-and-time folder, and waits between encounters. Includes your name, nearby combat data and game messages.")
     default boolean combinedCapture() { return false; }
     @ConfigItem(keyName="showRecordedTick", name="Show recorded tick", description="Show the current recorded tick index on screen to match video with the website replay. Starts at tick 0.")

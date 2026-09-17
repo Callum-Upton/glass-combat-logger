@@ -51,4 +51,5 @@ final class ConsumableTracker
     }
     void expire(int tick) { attempts.values().removeIf(use->tick-use.tick>2); }
     void clear() { attempts.clear(); }
+    boolean hasDivineAttempt(){return attempts.values().stream().anyMatch(u->u.option.equalsIgnoreCase("Drink")&&u.name.toLowerCase(Locale.ROOT).startsWith("divine "));}
 }

@@ -68,6 +68,19 @@ public class BossBoundaryTest
         }));plugin.onHitsplatApplied(event);}
     }
     @SuppressWarnings("unchecked") static List<Map<String,Object>> ticks(Map<String,Object> log){return (List<Map<String,Object>>)log.get("ticks");}
+    @Test public void scurriusKeepsQuietArenaAndSeparatesPostKillRats()throws Exception {
+        Harness h=new Harness();h.boss=new Enemy(7222);h.target=h.boss.npc;h.plugin.area=true;
+        h.hit(h.boss);h.tick();for(int i=0;i<40;i++)h.tick();assertTrue(h.plugin.saved.isEmpty());
+        h.boss.dead=true;h.plugin.onActorDeath(new ActorDeath(h.boss.npc));h.tick();
+        assertEquals("boss_death",h.plugin.saved.get(0).get("endReason"));
+        Enemy rat=new Enemy(7223);h.target=rat.npc;h.hit(rat);h.tick();
+        Field encounter=EncounterLedgerPlugin.class.getDeclaredField("encounter");encounter.setAccessible(true);
+        assertNull(encounter.get(h.plugin));
+        Enemy next=new Enemy(7222);h.target=next.npc;h.hit(next);h.tick();assertNotNull(encounter.get(h.plugin));
+        h.plugin.area=false;h.tick();h.tick();assertEquals(1,h.plugin.saved.size());h.tick();
+        assertEquals("left_encounter",h.plugin.saved.get(1).get("endReason"));
+        assertEquals("rock_impact",ScurriusProfile.INSTANCE.groundHazard(2644));
+    }
     @Test public void preRollIsBoundedAndDoesNotExtendDeathTail()throws Exception {
         Harness h=new Harness();for(int i=0;i<20;i++)h.tick();h.hit(h.boss);h.tick();
         h.plugin.onActorDeath(new ActorDeath(h.boss.npc));h.tick();for(int i=0;i<16;i++)h.tick();

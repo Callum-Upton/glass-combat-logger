@@ -68,7 +68,7 @@ public class RecorderTest
         assertEquals(3,ticks(plugin).size());
         assertEquals(0,ticks(plugin).get(2).get("healingEstimate"));
         assertTrue(((List<?>)ticks(plugin).get(2).get("events")).isEmpty());
-        assertEquals(Collections.singletonList("[Glass Combat Logger] Recording started."), chat);
+        assertEquals(Collections.singletonList("[Zenyte] Recording started."), chat);
         // Capture the save submission without touching the real user's log directory.
         ThreadPoolExecutor writer = new ThreadPoolExecutor(1,1,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(1)) {
             @Override public void execute(Runnable task) { }
