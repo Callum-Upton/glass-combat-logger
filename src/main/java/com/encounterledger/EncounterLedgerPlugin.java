@@ -103,7 +103,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (!self && source != vengeanceTarget) return;
         for(ActorSpotAnim spot:source.getSpotAnims()) {
             String[] spell=SpellTracker.graphic(spot.getId());
-            if(spell==null || (!self && spot.getId()!=726))continue;
+            if(spell==null || (!self && spot.getId()!=725))continue;
             if(Objects.equals(seenSpellGraphics.put(spot,spot.getStartCycle()),spot.getStartCycle()))continue;
             if(!self) {
                 if(client.getTickCount()-vengeanceTargetTick>3) {targetVengeanceConfirmed=false;continue;}

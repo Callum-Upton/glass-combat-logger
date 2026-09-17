@@ -9,8 +9,8 @@ final class SpellTracker {
     private int markEnd = -1;
     static String[] graphic(int id) {
         switch(id) {
-            case 725: case 2605: return new String[]{"vengeance","Vengeance cast","cast"};
-            case 726: return new String[]{"vengeance_other","Vengeance Other received","received"};
+            case 726: case 2605: return new String[]{"vengeance","Vengeance cast","cast"};
+            case 725: return new String[]{"vengeance_other","Vengeance Other received","received"};
             case 1854: case 3288: return new String[]{"death_charge","Death Charge cast","cast"};
             case 1855: case 3289: return new String[]{"death_charge","Death Charge effect triggered","trigger"};
             case 1852: return new String[]{"mark_of_darkness","Mark of Darkness cast","cast"};

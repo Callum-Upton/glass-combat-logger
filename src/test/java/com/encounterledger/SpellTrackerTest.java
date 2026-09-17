@@ -4,8 +4,8 @@ import static org.junit.Assert.*;
 
 public class SpellTrackerTest {
     @Test public void castsAndTriggersAndReceivedSpellsAreDistinct() {
-        assertEquals("cast",SpellTracker.graphic(725)[2]);
-        assertEquals("received",SpellTracker.graphic(726)[2]);
+        assertEquals("cast",SpellTracker.graphic(net.runelite.api.GraphicID.VENGEANCE)[2]);
+        assertEquals("received",SpellTracker.graphic(net.runelite.api.GraphicID.VENGEANCE_OTHER)[2]);
         assertEquals("trigger",SpellTracker.graphic(1855)[2]);
         assertEquals("trigger",SpellTracker.graphic(3289)[2]);
         assertEquals("thrall",SpellTracker.graphic(1874)[0]);
