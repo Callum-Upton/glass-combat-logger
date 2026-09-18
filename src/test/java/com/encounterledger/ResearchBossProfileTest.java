@@ -9,7 +9,7 @@ public class ResearchBossProfileTest {
   int[] ids={2042,12191,9418},regions={9007,12132,15515};
   for(int i=0;i<profiles.length;i++){
    ResearchBossProfile p=profiles[i];assertSame(p,BossProfile.forNpc(ids[i]));
-   WorldPoint tile=new WorldPoint((regions[i]>>8)*64+32,(regions[i]&255)*64+32,0);
+   WorldPoint tile=new WorldPoint((regions[i]>>8)*64+32,(regions[i]&255)*64+32,i==2?3:0);
    assertTrue(p.containsEncounterTile(tile,true));assertFalse(p.containsEncounterTile(tile,false));
    assertFalse(p.containsEncounterTile(new WorldPoint(3200,3200,0),true));
    assertFalse(p.containsEncounterTile(new WorldPoint(tile.getX(),tile.getY(),1),true));
@@ -17,6 +17,16 @@ public class ResearchBossProfileTest {
    assertFalse(p.completionMessage("Your Yama kill count is: 1."));
   }
   assertNull(BossProfile.forNpc(9469));assertNull(BossProfile.forNpc(2045));
+ }
+ @Test public void phosaniRecordedPlaneKeepsFightOpenAndExitStillCloses()throws Exception{
+  BossBoundaryTest.Harness h=new BossBoundaryTest.Harness();BossBoundaryTest.Enemy boss=new BossBoundaryTest.Enemy(9418);
+  WorldPoint arena=new WorldPoint((15515>>8)*64+32,(15515&255)*64+32,3);
+  assertFalse(ResearchBossProfile.PHOSANI.containsEncounterTile(new WorldPoint(arena.getX(),arena.getY(),0),true));
+  h.target=boss.npc;h.plugin.area=ResearchBossProfile.PHOSANI.containsEncounterTile(arena,true);h.hit(boss);
+  for(int i=0;i<45;i++)h.tick();assertTrue(h.plugin.saved.isEmpty());
+  h.target=null;h.plugin.area=ResearchBossProfile.PHOSANI.containsEncounterTile(new WorldPoint(3200,3200,0),false);
+  h.tick();h.tick();assertTrue(h.plugin.saved.isEmpty());h.tick();
+  assertEquals(1,h.plugin.saved.size());assertEquals("left_encounter",h.plugin.saved.get(0).get("endReason"));
  }
  @Test public void phaseDeathDoesNotSplitButCompletionAndExitDo()throws Exception{
   for(int id:new int[]{2042,12191,9418}){
