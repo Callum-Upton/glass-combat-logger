@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "autoCapture": [
+    "yama",
+    "scurrius",
+    "vorkath",
+    "royal_titans",
+    "zulrah",
+    "duke",
+    "phosanis_nightmare",
+    "cox",
+    "vardorvis"
+  ],
+  "liveLogging": true,
+  "autoUpload": true
+}

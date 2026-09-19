@@ -93,7 +93,7 @@ final class ResearchRecorder {
     }
     @Subscribe public void onConfigChanged(ConfigChanged event) {
         if("encounterledger".equals(event.getGroup()) && ("researchMode".equals(event.getKey())||"combinedCapture".equals(event.getKey())))clientThread.invoke(()->{
-            if(!config.researchMode()&&!config.combinedCapture()&&!combinedEncounter){stop("manual_stop");latched=false;}
+            if(!config.researchMode()&&!combinedEncounter){stop("manual_stop");latched=false;}
         });
     }
     @Subscribe public void onGameStateChanged(GameStateChanged event) {
@@ -102,7 +102,7 @@ final class ResearchRecorder {
     }
     String activeSessionId() { return session==null?null:sessionId; }
     @Subscribe(priority=100) public void onGameTick(GameTick event) {
-        if(config.combinedCapture()&&!combinedEncounter)return;
+        if(!config.researchMode()&&config.combinedCapture()&&!combinedEncounter){stop("manual_stop");latched=false;return;}
         if(!config.researchMode()&&!config.combinedCapture()&&!combinedEncounter){stop("manual_stop");latched=false;return;}
         Player player=client.getLocalPlayer();
         if(player==null || client.getGameState()!=GameState.LOGGED_IN)return;

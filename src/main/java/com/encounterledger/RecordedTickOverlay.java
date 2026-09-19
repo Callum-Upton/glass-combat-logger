@@ -27,6 +27,9 @@ final class RecordedTickOverlay extends OverlayPanel
         panelComponent.getChildren().clear();
         if (!config.showRecordedTick()) return null;
         int tick = plugin.displayedRecordedTick();
+        panelComponent.getChildren().add(LineComponent.builder().left("Research")
+            .right(config.researchMode()?"CONTINUOUS":config.combinedCapture()?"ON":"OFF").rightColor(config.researchMode()||config.combinedCapture()?Color.GREEN:Color.LIGHT_GRAY).build());
+        if(config.combinedCapture())panelComponent.getChildren().add(LineComponent.builder().left("Combined capture").right("ON").build());
         panelComponent.getChildren().add(LineComponent.builder()
             .left("Zenyte")
             .right(tick < 0 ? "Waiting" : plugin.tickRecording() ? "Recording" : "Stopped")

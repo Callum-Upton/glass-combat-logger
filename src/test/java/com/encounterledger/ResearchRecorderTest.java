@@ -21,6 +21,14 @@ public class ResearchRecorderTest {
         Map<?,?> session() throws Exception {Field f=ResearchRecorder.class.getDeclaredField("session");f.setAccessible(true);return (Map<?,?>)f.get(recorder);}
         void emit() throws Exception {Method m=ResearchRecorder.class.getDeclaredMethod("emit",String.class,Map.class);m.setAccessible(true);m.invoke(recorder,"test_observation",ResearchRecorder.map("id",999));}
     }
+    @Test public void manualModeStartsOutsideCombatWithCombinedEnabledAndStopsWithoutDisablingCombined() throws Exception {
+        Harness h=new Harness();h.combined=true;h.recorder.onGameTick(new GameTick());assertNull(h.session());
+        h.enabled=true;h.recorder.onGameTick(new GameTick());assertNotNull(h.session());
+        h.enabled=false;h.tick++;h.recorder.onGameTick(new GameTick());assertNull(h.session());assertEquals(1,h.writes.size());assertTrue(h.combined);
+        h.recorder.beginEncounter("Yama");assertNotNull(h.session());
+        h.tick++;h.recorder.onGameTick(new GameTick());assertNotNull(h.session());
+        h.recorder.releaseEncounter();assertNull(h.session());assertEquals(2,h.writes.size());
+    }
     @Test public void disabledModeDoesNothingAndManualStopQueuesOneDetachedLog() throws Exception {
         Harness h=new Harness();h.recorder.onGameTick(new GameTick());assertNull(h.session());assertTrue(h.writes.isEmpty());
         h.enabled=true;h.recorder.onGameTick(new GameTick());Map<?,?> session=h.session();assertNotNull(session);

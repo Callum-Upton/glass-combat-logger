@@ -1,66 +1,44 @@
 # Zenyte
 
-A RuneLite plugin that records encounters as local JSON files for later replay and analysis. Companion website: [Zenyte](https://zenyte.gg).
+A RuneLite plugin that records local tick-by-tick encounters for replay and analysis at https://zenyte.gg. Local recording needs no account and does not automate gameplay.
 
-The plugin does not upload recordings, contact the website, require an account, or automate gameplay. All users have the same recording features. The Plugin Hub currently lists the earlier release as Glass Combat Logger. This source prepares the next update under the Zenyte name.
+## Recording
 
-## Recording a fight
+Enable Zenyte and fight normally. Regular recording starts from combat evidence and saves beneath `.runelite/encounter-ledger/`. Wait for **Log saved** before importing a file. The gold gem sidebar shows the folder path.
 
-1. Enable **Zenyte** in RuneLite.
-2. For research testing, enable **Combined capture** before fighting. Leave standalone **Research mode** off.
-3. Fight normally. Recording starts automatically from observed incoming or outgoing damage, including zero hits. Up to 15 preceding ticks of player state are retained.
-4. Wait for **Log saved** and, with research enabled, **Research saved** messages. A recording-stopped message alone does not mean the file has finished saving.
-5. Click the gold gem in RuneLite's sidebar, then **Copy folder path** and paste it into your file manager.
+Automatic encounter profiles cover Yama, Scurrius, Vorkath, Royal Titans, Zulrah, Duke Sucellus, Phosani's Nightmare, Chambers of Xeric and Vardorvis. Capture support does not imply complete website damage attribution or ranking eligibility. Generic combat can also produce local recordings.
 
-Regular logs save under `.runelite/encounter-ledger/` in your user home folder. Combined capture groups the encounter JSON, numbered research parts and arena snapshots under `research/<boss>_<date>_<time>_<UUID>/`. Folder times use your computer's local timezone. Existing settings and file paths are preserved from earlier Encounter Ledger / Zenyte builds.
+## Optional uploads and live logging
 
-Upload the regular encounter JSON to Zenyte for review. Research parts and arena snapshots are separate diagnostic formats and cannot be imported as fights. Accounts with researcher permission can upload the combined folder on My Logs. Uploading or sharing is a separate user action; read the website's data-use notice before uploading.
+Visit https://zenyte.gg/connection while signed in, review the public-sharing and research-contribution consent, and generate a connection key. Paste it into the masked **Plugin connection key** setting. Enable **Automatically upload logs**, **Public live logging**, or both. Both options default OFF. Live sharing also requires website consent.
 
-## Settings
+These options send regular recordings for recognised encounters to the fixed HTTPS zenyte.gg API. Completed uploads are public; live sharing broadcasts combat data including character names, gear and positions. Research files are never automatically transmitted. Local files remain available if the connection fails. Live sharing alone is not a saved website archive; enable automatic upload to save completed recordings there.
 
-| Setting | Default | Behaviour |
-| --- | --- | --- |
-| Combined capture | Off | Automatically starts research with an encounter, groups the files, and waits between encounters. Turning it off during a linked encounter allows that recording to finish. |
-| Research mode | Off | Standalone diagnostic recording from the next logged-in tick until disabled. Use with Combined capture off when exploring an arena or researching a new boss. |
-| Show recorded tick | On | Displays recording status and the current recorded tick for matching a video to a replay. |
-| End after idle ticks | 15 | Ends generic encounters after this many ticks without damage or a live NPC interaction. |
+Keys expire after 90 days and can be revoked on the website. RuneLite stores the key in its configuration; the key is excluded from recordings. Requests use a bounded background queue, timeouts and no redirects. Failed uploads require manual upload through My Logs. The live service currently limits streams to 64 MiB each / 128 MiB combined and eight simultaneous streams, and shows offline after 20 seconds without updates.
 
-## Coverage and limitations
+## Research and bookmarks
 
-Yama, Scurrius and post-quest Vorkath have explicit encounter boundaries. Yama and Vorkath wait briefly for an official kill-time message after boss death. Judge phases, stepping stones and Vorkath's acid phase remain inside the active encounter. Adds do not finish the main boss fight. A surviving Vorkath spawn fought after a saved kill can produce a separate generic recording. Generic recording is not restricted to a boss allowlist: close successive fights can share a file, and incoming environmental damage can start one. New bosses need validation before relying on exact kill boundaries or rankings.
+Research starts OFF each plugin session, including after updating. Regular recording remains available without research.
 
-Encounters otherwise end on player death, idle timeout, logout/hop/disconnect, plugin disable, or 2,000 recorded ticks (about 20 minutes). The last limit ends the regular log; it is not a continuous raid recording. Research splits into consecutive files at 30,000 events or 1,000 ticks, preserving its session timeline. There is no total disk quota; remove recordings you no longer need.
+- `::zenyte research on`: attach combined diagnostics to encounters.
+- `::zenyte research off`: stop research for new encounters; attached research finishes with its fight.
+- `::zenyte research status`: show the current setting.
+- `::zenyte research continuous`: explicitly capture outside combat for arena mapping; combined fight capture stays enabled.
 
-Weapon interpretation belongs to the website. The plugin retains each non-idle local animation start while targeting an NPC, with the weapon ID/name, selected style, target and client timing, including unknown weapons. Defensive and utility animations may also be present; an observation is not a confirmed attack.
+The optional **Research mode hotkey** toggles combined research with chat and overlay feedback. **Bookmark hotkey** marks the current recording tick. Both are unassigned by default and neither automates gameplay. **Show recorded tick** defaults ON; the generic idle timeout defaults to 15 ticks.
 
-Client observations do not reveal every server calculation. NPC health is a ratio, attack animations can be ambiguous, and a damage hitsplat does not directly identify the attacker. Missing evidence must not be treated as confirmed damage attribution.
+Combined research saves under `research/<boss>_<date>_<time>_<UUID>/`, alongside the regular replay. Research parts are diagnostics, not separate replay files. Researcher accounts can manually upload a combined folder through the website.
 
-## Data recorded
+## Data and limits
 
-Regular logs include your character name, equipment and inventory, skills, active prayers and buffs, special energy, position, target, animations, observed hitsplats and encounter effects. Yama's participant evidence includes nearby character names. During recognized Yama, Scurrius and active Chambers encounters, regular snapshots also retain visible nearby players' character names, stable recording-local identities and tile positions (same world view, up to 48 tiles away). Missing samples do not establish that someone left the fight. These samples do not include another player's equipment, prayers or exact health. Research adds nearby NPC/object/projectile/graphic observations, anonymous other-player actor references, game/system messages, selected menu-action metadata and raw numeric game variables. It does not inspect another player's equipment. System messages can contain names.
+Regular logs include your character name, equipment, inventory, stats, prayers, buffs, position, targets, animations, hitsplats and encounter effects. Scoped participant capture in Yama, Scurrius, Royal Titans and active CoX records visible nearby names and positions, not other players' gear or prayers. Research adds nearby actor/object/projectile/graphic observations, game/system messages, selected menu-action metadata and numeric game variables. Player chat channels, typed chat and login credentials are not collected. System messages can contain names.
 
-Public, private, clan and friends chat message types, menu target strings, typed chat text and login credentials are not collected. Raw numeric variables can include settings unrelated to combat. See [REVIEW.md](REVIEW.md) for capture boundaries and implementation details.
+Ordinary encounters allow 2,000 snapshots; CoX allows 12,000. Research rotates at 30,000 events or 1,000 ticks. There is no total local disk quota or crash recovery. Background save failures pause capture with a notice; fix storage and restart the plugin. A crash before saving finishes can lose queued data.
 
-Saves run on a bounded background queue, writing a temporary file before moving it into place. Storage failures are reported in chat and pause capture. Fix storage and restart the plugin after an error. Closing or crashing the client before saving completes can lose an active or queued recording.
+Weapon IDs and animation observations are interpreted on the website, without a client weapon allowlist. Client evidence cannot reveal every server calculation; unknown damage should remain unknown. Vardorvis has automated kill/exit/death boundary tests but still needs dedicated in-game validation of those outcomes. See REVIEW.md for detailed capture and privacy boundaries.
 
-## Build and run from source
+## Build
 
-Install JDK 17 or newer to run Gradle 8.10; the plugin targets Java 11. The first build needs internet access for Gradle and RuneLite dependencies.
+Use JDK 17 or newer for Gradle; the plugin targets Java 11. Run `gradlew.bat test build` on Windows or `sh gradlew test build` elsewhere. `gradlew run` launches a development client; a JAR cannot simply be dropped into a normal installation.
 
-Windows:
-
-```powershell
-.\gradlew.bat test build
-.\gradlew.bat run
-```
-
-Linux/macOS:
-
-```sh
-sh gradlew test build
-sh gradlew run
-```
-
-The `run` task launches RuneLite's development client with this plugin loaded. A JAR cannot simply be dropped into a normal RuneLite installation. For Jagex accounts, follow [RuneLite's development-login guide](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
-
-The source package is standalone: it does not require a RuneLite fork, the website source, or any recorded logs. See [SUBMISSION.md](SUBMISSION.md) for the Plugin Hub submission steps.
+The plugin folder is a standalone source repository. Do not publish the surrounding website, deployments or player logs. See SUBMISSION.md for release steps.

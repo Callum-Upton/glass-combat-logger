@@ -34,9 +34,36 @@ public class EncounterLedgerPlugin extends Plugin
     boolean tickRecording() { return tickRecording; }
     @Inject private Gson gson;
     @Inject private EncounterLedgerConfig config;
+    @Inject private ConfigManager configManager;
     @Inject private ClientThread clientThread;
     @Inject private net.runelite.client.input.KeyManager keyManager;
     private net.runelite.client.util.HotkeyListener bookmarkListener;
+    private net.runelite.client.util.HotkeyListener researchListener;
+    private int lastResearchToggleTick=-1;
+    private void toggleResearchMode() {
+        if(client.getGameState()!=GameState.LOGGED_IN || lastResearchToggleTick==client.getTickCount())return;
+        lastResearchToggleTick=client.getTickCount();
+        setResearchMode(config.combinedCapture()||config.researchMode()?"off":"on");
+    }
+    private void setResearchMode(String mode) {
+        boolean continuous="continuous".equals(mode);
+        boolean enabled=!"off".equals(mode);
+        configManager.setConfiguration("encounterledger","researchMode",continuous);
+        configManager.setConfiguration("encounterledger","combinedCapture",enabled);
+        notifyChat(!enabled?"Research OFF for new encounters. Any attached research finishes with the current fight.":
+            continuous?"Continuous diagnostic research ON: captures outside combat too. Fight logs are included. Use ::zenyte research off to save.":
+            "Research ON: combined research and replay capture follows encounters. Captures your name, nearby combat and game messages. Use ::zenyte research off to disable.");
+    }
+    @Subscribe public void onCommandExecuted(CommandExecuted event) {
+        if(!"zenyte".equalsIgnoreCase(event.getCommand()))return;
+        String mode=ResearchCommand.mode(event.getArguments());
+        if(mode==null){notifyChat("Use ::zenyte research on, off, status, or continuous (diagnostics outside combat).");return;}
+        if("status".equals(mode)){
+            notifyChat(config.researchMode()?"Continuous diagnostic research ON.":config.combinedCapture()?"Research ON (combined encounter capture).":"Research OFF (regular logs only).");return;
+        }
+        if(client.getGameState()!=GameState.LOGGED_IN){notifyChat("Log in before changing research capture.");return;}
+        setResearchMode(mode);
+    }
     private int lastBookmarkTick=-1;
     @SuppressWarnings("unchecked")
     private void addBookmark() {
@@ -61,6 +88,11 @@ public class EncounterLedgerPlugin extends Plugin
     @Inject private net.runelite.client.eventbus.EventBus eventBus;
     private ResearchRecorder research;
     private ThreadPoolExecutor writer;
+    private LiveUploader liveUploader;
+    @Subscribe public void onConfigChanged(net.runelite.client.events.ConfigChanged event){
+        if("encounterledger".equals(event.getGroup())&&liveUploader!=null)
+            clientThread.invoke(()->liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload()));
+    }
     private final List<Map<String, Object>> pending = new ArrayList<>();
     private Map<String, Object> encounter;
     private Map<String,Object> awaitingTiming;
@@ -247,11 +279,17 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Override protected void startUp()
     {
-        lastBookmarkTick=-1; cox.reset();
+        configManager.setConfiguration("encounterledger","researchMode",false);
+        configManager.setConfiguration("encounterledger","combinedCapture",false);
+        lastBookmarkTick=-1; lastResearchToggleTick=-1; cox.reset();
         bookmarkListener=new net.runelite.client.util.HotkeyListener(()->config.bookmarkHotkey()) {
             @Override public void hotkeyPressed(){clientThread.invoke(()->addBookmark());}
         };
         keyManager.registerKeyListener(bookmarkListener);
+        researchListener=new net.runelite.client.util.HotkeyListener(()->config.researchHotkey()) {
+            @Override public void hotkeyPressed(){clientThread.invoke(()->toggleResearchMode());}
+        };
+        keyManager.registerKeyListener(researchListener);
         logsNavigation = net.runelite.client.ui.NavigationButton.builder()
             .tooltip("Zenyte").icon(LogsPanel.icon()).priority(8)
             .panel(new LogsPanel(RuneLite.RUNELITE_DIR.toPath().resolve("encounter-ledger"))).build();
@@ -265,6 +303,8 @@ public class EncounterLedgerPlugin extends Plugin
         writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> {
             Thread thread = new Thread(r, "encounter-ledger-writer"); thread.setDaemon(true); return thread;
         });
+        liveUploader=new LiveUploader(gson,this::notifyChat);
+        liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());
         research=new ResearchRecorder(client,config,gson,writer,this::notifyChat,clientThread);
         eventBus.register(research);
     }
@@ -272,12 +312,16 @@ public class EncounterLedgerPlugin extends Plugin
     @Override protected void shutDown()
     {
         if(bookmarkListener!=null){keyManager.unregisterKeyListener(bookmarkListener);bookmarkListener=null;}
+        if(researchListener!=null){keyManager.unregisterKeyListener(researchListener);researchListener=null;}
         if (logsNavigation != null) { clientToolbar.removeNavigation(logsNavigation); logsNavigation = null; }
         if (recordedTickOverlay != null) { overlayManager.remove(recordedTickOverlay); recordedTickOverlay = null; }
         if(research!=null){eventBus.unregister(research);research.stop("plugin_disabled");research=null;}
         finish("plugin_disabled");
         flushTiming();
-        if (writer != null) writer.shutdown();
+        LiveUploader closing=liveUploader;
+        if(writer!=null){try{writer.execute(()->{if(closing!=null)closing.close();});}catch(RejectedExecutionException ex){if(closing!=null)closing.close();}writer.shutdown();}
+        // Writer drains local saves before closing its upload queue.
+
         consumables.clear(); seenProjectiles.clear(); seenGraphics.clear();
         pending.clear(); preCombat.clear(); previousHp = -1;
         encounterBoss = null; bossDeathPending = false; awaitingNextFight = false;
@@ -535,6 +579,7 @@ public class EncounterLedgerPlugin extends Plugin
             }
             ticks.add(snapshot(player,hp,spellState,profile,ticks.size()));
             if(cox.active)ticks.get(ticks.size()-1).put("raidState",object("inRaid",client.getVarbitValue(CoxCapture.IN_RAID),"state",client.getVarbitValue(CoxCapture.RAID_STATE)));
+            if(liveUploader!=null){liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());liveUploader.tick(encounter);}
             displayedRecordedTick = ticks.size() - 1;
             tickRecording = true;
             Boolean inArea = cox.active ? Boolean.valueOf(client.getVarbitValue(CoxCapture.IN_RAID)==1) : encounterArea(player,profile);
@@ -613,7 +658,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (!reason.equals("boss_death")) encounterBoss = null;
         notifyChat("Recording stopped (" + reason.replace('_', ' ') + "). Saving "
             + ((List<?>) completed.get("ticks")).size() + " ticks...");
-        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && Arrays.asList("yama","vorkath","royal_titans","zulrah","duke","phosanis_nightmare").contains(((Map<?,?>)completed.get("boss")).get("id"))) {
+        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && Arrays.asList("yama","vorkath","royal_titans","zulrah","duke","phosanis_nightmare","vardorvis").contains(((Map<?,?>)completed.get("boss")).get("id"))) {
             flushTiming();awaitingTiming=completed;timingDeadline=client.getTickCount()+15;
         } else saveEncounter(completed);
         if(awaitingTiming!=completed && completed.containsKey("researchSessionId")&&research!=null)research.releaseEncounter();
@@ -621,6 +666,7 @@ public class EncounterLedgerPlugin extends Plugin
 
     void saveEncounter(Map<String, Object> completed)
     {
+        LiveUploader uploader=liveUploader;
         try
         {
             writer.execute(() -> {
@@ -630,9 +676,11 @@ public class EncounterLedgerPlugin extends Plugin
                     Files.createDirectories(directory);
                     Path temporary = directory.resolve(completed.get("id") + ".tmp");
                     Path destination = directory.resolve(RecordingFolder.logFile(completed));
-                    Files.write(temporary, gson.toJson(completed).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW);
+                    String json=gson.toJson(completed);
+                    Files.write(temporary, json.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW);
                     try { Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE); }
                     catch (AtomicMoveNotSupportedException ex) { Files.move(temporary, destination); }
+                    if(uploader!=null && completed.containsKey("boss"))uploader.completed(json,String.valueOf(completed.get("id")));
                     notifyChat("Log saved: " + (completed.containsKey("researchSessionId") ? "research/"+completed.getOrDefault("researchFolder",completed.get("researchSessionId"))+"/" : "") + destination.getFileName() + ". Ready to import into Zenyte.");
                 }
                 catch (Exception ex) { storageFailed = true; LOG.error("Zenyte could not save a log; recording paused until plugin restart", ex); notifyChat("Could not save the log. Recording paused; check your RuneLite log and restart the plugin after fixing storage."); }
@@ -654,4 +702,3 @@ public class EncounterLedgerPlugin extends Plugin
         else clientThread.invokeLater(notify);
     }
 }
-

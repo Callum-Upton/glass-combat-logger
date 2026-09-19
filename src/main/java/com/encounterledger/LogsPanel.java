@@ -25,7 +25,7 @@ final class LogsPanel extends PluginPanel
         JPanel content = new JPanel(new BorderLayout(0, 14));
         content.add(new JLabel("<html><b>Zenyte</b><br><br>"
             + "Your recordings are saved on this computer.<br><br>"
-            + "Enable Combined capture in the plugin settings to keep research and fight logs together."
+            + "Regular logs are the default. For testing, use ::zenyte research on to capture research and fight logs together. Research resets OFF when the plugin restarts."
             + "<br><br>Wait for the saved message before sharing a log.</html>"), BorderLayout.NORTH);
         JPanel actions = new JPanel(new BorderLayout(0, 8));
         JTextField path = new JTextField(directory.toString());
