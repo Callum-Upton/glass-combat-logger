@@ -8,7 +8,7 @@ There are no account-specific feature switches, subscriptions or tester gates in
 
 ## Entry points
 
-- `EncounterLedgerPlugin`: ordinary encounter lifecycle, player state, observed combat events and background writer. Generic incoming/outgoing combat trigger, recognised boss area continuity and CoX raid-message boundaries. Generic encounters are not limited to an arena allowlist.
+- `EncounterLedgerPlugin`: ordinary encounter lifecycle, player state, observed combat events and background writer. Recognised boss combat triggers, boss area continuity and CoX raid-message boundaries. Generic combat triggers require explicit research opt-in; ordinary recording ignores unrecognised creatures.
 - `ResearchRecorder`: optional independent diagnostics, or diagnostics attached to ordinary encounter boundaries through Combined capture.
 - `ArenaSnapshot`: loaded scene terrain, collision flags, object IDs and instance template coordinates. Snapshots are written locally, not displayed as a live safe-tile overlay.
 - `RecordedTickOverlay`: recording status, tick index and elapsed replay time only.
@@ -63,3 +63,4 @@ Other-player names/positions are observable encounter evidence, not verified acc
 Zulrah (template regions 9007/9008), Duke Sucellus (12132) and Vardorvis (4405) use instanced plane-zero arenas. Phosani's Nightmare uses region 15515 on plane three. These profiles retain combat-triggered recordings inside their respective arenas. Profiles match observed NPC forms only. Phase deaths/depletion do not end these encounters; boss-specific kill-count messages do. Player death, three-tick arena exit, logout and length/storage limits still terminate recording. Projectile paths and bounded nearby NPC observations are retained; new damage interpretation remains on the website. These new profiles have automated boundary tests, but still require live-client validation of full kills, exits and deaths. Duke preparation before the first combat trigger is not guaranteed to be recorded.
 
 LiveUploader uses a bounded background queue, HTTP timeouts and no redirects. Research files are never transmitted. Live sharing requires both website consent and the plugin toggle. Revocation removes server access immediately. The user has confirmed successful live logging and automatic uploads. Vardorvis boundary tests pass, but dedicated live kill/death/exit validation remains outstanding.
+

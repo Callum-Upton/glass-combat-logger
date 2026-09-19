@@ -50,7 +50,7 @@ public class RecorderTest
         });
         EncounterLedgerPlugin plugin = new EncounterLedgerPlugin();
         field(plugin,"client",client);
-        field(plugin,"config", proxy(EncounterLedgerConfig.class,(method,args) -> method.equals("idleTicks") ? 15 : null));
+        field(plugin,"config", proxy(EncounterLedgerConfig.class,(method,args) -> method.equals("idleTicks") ? 15 : method.equals("researchMode") ? true : null));
         plugin.onGameTick(new GameTick());
         assertNull(ticks(plugin));
         HitsplatApplied outgoing = new HitsplatApplied(); outgoing.setActor(npc);

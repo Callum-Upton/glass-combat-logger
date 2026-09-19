@@ -50,6 +50,7 @@ public class MechanicsTest {
     }
     @Test public void unrelatedFightNeverReceivesYamaEvents() throws Exception {
         BossBoundaryTest.Harness h=new BossBoundaryTest.Harness();
+        h.set("config",new EncounterLedgerConfig(){@Override public boolean researchMode(){return true;}});
         BossBoundaryTest.Enemy other=new BossBoundaryTest.Enemy(1);h.target=other.npc;h.hit(other);h.tick();
         h.plugin.onNpcSpawned(new NpcSpawned(new BossBoundaryTest.Enemy(14179).npc));
         GameStateChanged state=new GameStateChanged();state.setGameState(GameState.LOGIN_SCREEN);h.plugin.onGameStateChanged(state);

@@ -6,7 +6,7 @@ A RuneLite plugin that records local tick-by-tick encounters for replay and anal
 
 Enable Zenyte and fight normally. Regular recording starts from combat evidence and saves beneath `.runelite/encounter-ledger/`. Wait for **Log saved** before importing a file. The gold gem sidebar shows the folder path.
 
-Automatic encounter profiles cover Yama, Scurrius, Vorkath, Royal Titans, Zulrah, Duke Sucellus, Phosani's Nightmare, Chambers of Xeric and Vardorvis. Capture support does not imply complete website damage attribution or ranking eligibility. Generic combat can also produce local recordings.
+Automatic encounter profiles cover Yama, Scurrius, Vorkath, Royal Titans, Zulrah, Duke Sucellus, Phosani's Nightmare, Chambers of Xeric and Vardorvis. Capture support does not imply complete website damage attribution or ranking eligibility. Unrecognised creatures do not start regular recordings by default. Explicitly enabling research also allows generic combat recordings for mapping new encounters.
 
 ## Optional uploads and live logging
 

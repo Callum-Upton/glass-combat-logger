@@ -68,6 +68,24 @@ public class BossBoundaryTest
         }));plugin.onHitsplatApplied(event);}
     }
     @SuppressWarnings("unchecked") static List<Map<String,Object>> ticks(Map<String,Object> log){return (List<Map<String,Object>>)log.get("ticks");}
+    private static Object active(Capture plugin)throws Exception {Field f=EncounterLedgerPlugin.class.getDeclaredField("encounter");f.setAccessible(true);return f.get(plugin);}
+    @Test public void ordinaryCreaturesNeverStartRegularRecordingButResearchCanOptIn()throws Exception {
+        Harness h=new Harness();Enemy rat=new Enemy(1);h.target=rat.npc;
+        h.hit(rat);h.tick();assertNull(active(h.plugin));
+        h.set("config",new EncounterLedgerConfig(){@Override public boolean combinedCapture(){return true;}});
+        h.hit(rat);h.tick();assertNotNull(active(h.plugin));
+        h.set("config",new EncounterLedgerConfig(){});h.tick();assertNotNull(active(h.plugin));
+    }
+    @Test public void incomingGenericDamageIsIgnoredWhileAnAttackingBossStartsWithoutSelectedTarget()throws Exception {
+        Harness h=new Harness();h.target=null;
+        Field c=EncounterLedgerPlugin.class.getDeclaredField("client");c.setAccessible(true);Client original=(Client)c.get(h.plugin);
+        Player player=original.getLocalPlayer();
+        HitsplatApplied hit=new HitsplatApplied();hit.setActor(player);hit.setHitsplat(fake(Hitsplat.class,m->m.equals("getHitsplatType")?HitsplatID.DAMAGE_ME:m.equals("isMine")?true:m.equals("getAmount")?8:null));
+        h.plugin.onHitsplatApplied(hit);h.tick();assertNull(active(h.plugin));
+        NPC boss=fake(NPC.class,m->m.equals("getId")?14176:m.equals("getName")?"Yama":m.equals("getHealthRatio")?100:m.equals("getInteracting")?player:null);
+        Client client=(Client)Proxy.newProxyInstance(Client.class.getClassLoader(),new Class<?>[]{Client.class},(p,m,a)->m.getName().equals("getNpcs")?Collections.singletonList(boss):m.invoke(original,a));
+        h.set("client",client);h.plugin.onHitsplatApplied(hit);h.tick();assertNotNull(active(h.plugin));
+    }
     @Test public void scurriusKeepsQuietArenaAndSeparatesPostKillRats()throws Exception {
         Harness h=new Harness();h.boss=new Enemy(7222);h.target=h.boss.npc;h.plugin.area=true;
         h.hit(h.boss);h.tick();for(int i=0;i<40;i++)h.tick();assertTrue(h.plugin.saved.isEmpty());

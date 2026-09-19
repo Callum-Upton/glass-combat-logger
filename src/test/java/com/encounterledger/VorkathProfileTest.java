@@ -40,6 +40,7 @@ public class VorkathProfileTest {
   BossBoundaryTest.Harness h=new BossBoundaryTest.Harness();BossBoundaryTest.Enemy boss=new BossBoundaryTest.Enemy(8061);
   h.target=boss.npc;h.plugin.area=true;h.hit(boss);h.tick();h.plugin.onActorDeath(new ActorDeath(boss.npc));h.tick();h.target=null;
   for(int i=0;i<16;i++)h.tick();assertEquals(1,h.plugin.saved.size());int size=BossBoundaryTest.ticks(h.plugin.saved.get(0)).size();
+  h.set("config",new EncounterLedgerConfig(){@Override public boolean combinedCapture(){return true;}}); // Explicit research can retain a standalone spawn.
   h.plugin.area=null; // Generic spawn has no recognised encounter area.
   BossBoundaryTest.Enemy spawn=new BossBoundaryTest.Enemy(8063);h.target=spawn.npc;h.hit(spawn);h.tick();h.target=null;
   for(int i=0;i<16;i++)h.tick();assertEquals(2,h.plugin.saved.size());

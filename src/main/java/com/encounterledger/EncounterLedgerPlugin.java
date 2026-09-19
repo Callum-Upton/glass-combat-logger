@@ -534,7 +534,13 @@ public class EncounterLedgerPlugin extends Plugin
         boolean combatEvent = pending.stream().anyMatch(e -> "damage_done".equals(e.get("kind")) || "damage_taken".equals(e.get("kind")));
         boolean engaged = player.getInteracting() instanceof NPC && !player.getInteracting().isDead();
         if(encounter==null&&RecordingTrigger.onlyDivineDamage(pending))combatEvent=false;
-        if (encounter == null && (raidStart!=null || (combatEvent && client.getVarbitValue(CoxCapture.IN_RAID)!=1)))
+        // Incoming boss damage can precede selecting a target (for example with auto-retaliate off).
+        if(encounter==null && combatEvent && encounterBoss==null && client.getNpcs()!=null) {
+            for(NPC npc:client.getNpcs())if(npc.getInteracting()==player && npc.getWorldView()==player.getWorldView()
+                && BossProfile.forNpc(npc.getId())!=null && !npc.isDead()) { encounterBoss=npc; break; }
+        }
+        boolean captureAllowed=profile()!=null || config.combinedCapture() || config.researchMode();
+        if (encounter == null && (raidStart!=null || (combatEvent && captureAllowed && client.getVarbitValue(CoxCapture.IN_RAID)!=1)))
         {
             flushTiming();observedParticipants.clear();
             ticks = new ArrayList<>();
@@ -702,3 +708,5 @@ public class EncounterLedgerPlugin extends Plugin
         else clientThread.invokeLater(notify);
     }
 }
+
+
