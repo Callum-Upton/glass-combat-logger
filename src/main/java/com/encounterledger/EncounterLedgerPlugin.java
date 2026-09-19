@@ -33,6 +33,7 @@ public class EncounterLedgerPlugin extends Plugin
     int displayedRecordedTick() { return displayedRecordedTick; }
     boolean tickRecording() { return tickRecording; }
     @Inject private Gson gson;
+    @Inject private okhttp3.OkHttpClient httpClient;
     @Inject private EncounterLedgerConfig config;
     @Inject private ConfigManager configManager;
     @Inject private ClientThread clientThread;
@@ -303,7 +304,7 @@ public class EncounterLedgerPlugin extends Plugin
         writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> {
             Thread thread = new Thread(r, "encounter-ledger-writer"); thread.setDaemon(true); return thread;
         });
-        liveUploader=new LiveUploader(gson,this::notifyChat);
+        liveUploader=new LiveUploader(gson,this::notifyChat,httpClient);
         liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());
         research=new ResearchRecorder(client,config,gson,writer,this::notifyChat,clientThread);
         eventBus.register(research);

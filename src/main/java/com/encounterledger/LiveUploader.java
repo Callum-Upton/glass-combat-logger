@@ -1,9 +1,9 @@
 package com.encounterledger;
 
 import com.google.gson.Gson;
-import java.net.URI;
-import java.net.http.*;
-import java.time.Duration;
+import okhttp3.*;
+
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 final class LiveUploader {
     private final Gson gson;
     private final Consumer<String> notify;
-    private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final OkHttpClient http;
     private final ThreadPoolExecutor queue=new ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(2),r->{Thread t=new Thread(r,"zenyte-upload");t.setDaemon(true);return t;});
     private volatile boolean busy,failed;
     private volatile String key="";
@@ -20,8 +20,8 @@ final class LiveUploader {
     private volatile String recording="";private volatile int sent;
     interface Transport {void send(String endpoint,String key,String json)throws Exception;}
     private Transport transport;
-    LiveUploader(Gson gson,Consumer<String> notify){this.gson=gson;this.notify=notify;}
-    LiveUploader(Gson gson,Consumer<String> notify,Transport transport){this(gson,notify);this.transport=transport;}
+    LiveUploader(Gson gson,Consumer<String> notify,OkHttpClient client){this.gson=gson;this.notify=notify;this.http=client.newBuilder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).connectTimeout(8,TimeUnit.SECONDS).readTimeout(60,TimeUnit.SECONDS).writeTimeout(60,TimeUnit.SECONDS).build();}
+    LiveUploader(Gson gson,Consumer<String> notify,Transport transport){this.gson=gson;this.notify=notify;this.http=null;this.transport=transport;}
     void awaitIdle()throws Exception {queue.submit(()->{}).get(5,TimeUnit.SECONDS);}
     static boolean validKey(String key){return key!=null&&key.matches("zy_[A-Za-z0-9_-]{43}");}
     void configure(String next,boolean stream,boolean save){
@@ -59,10 +59,14 @@ final class LiveUploader {
     private boolean submit(Runnable task){try{queue.execute(task);return true;}catch(RejectedExecutionException e){notify.accept("Upload queue full. Local logs are safe; upload through My logs.");return false;}}
     private void post(String endpoint,String credential,String json)throws Exception{
         if(transport!=null){transport.send(endpoint,credential,json);return;}
-        HttpRequest request=HttpRequest.newBuilder(URI.create("https://zenyte.gg/api/plugin/"+endpoint)).timeout(Duration.ofSeconds(endpoint.equals("logs")?60:10))
-            .header("Authorization","Bearer "+credential).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json)).build();
-        HttpResponse<Void> response=http.send(request,HttpResponse.BodyHandlers.discarding());
-        if(response.statusCode()<200||response.statusCode()>=300)throw new java.io.IOException("Upload rejected");
+        Request request=new Request.Builder().url("https://zenyte.gg/api/plugin/"+endpoint)
+            .header("Authorization","Bearer "+credential)
+            .post(RequestBody.create(MediaType.parse("application/json; charset=utf-8"),json)).build();
+        Call call=http.newCall(request);
+        call.timeout().timeout(endpoint.equals("logs")?60:10,TimeUnit.SECONDS);
+        try(Response response=call.execute()){
+            if(!response.isSuccessful())throw new java.io.IOException("Upload rejected");
+        }
     }
     void close(){queue.shutdown();}
 }
