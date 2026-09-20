@@ -10,7 +10,7 @@ Automatic encounter profiles cover Yama, Scurrius, Vorkath, Royal Titans, Zulrah
 
 ## Optional uploads and live logging
 
-Visit https://zenyte.gg/connection while signed in, review the public-sharing and research-contribution consent, and generate a connection key. Paste it into the masked **Plugin connection key** setting. Enable **Automatically upload logs**, **Public live logging**, or both. Both options default OFF. Live sharing also requires website consent.
+Visit https://zenyte.gg/connection while signed in, review the public-sharing and research-contribution consent, and generate a connection key. Paste it into the masked **Plugin connection key** setting. Enable **Allow Zenyte networking** and accept its privacy warning, then enable **Automatically upload logs**, **Public live logging**, or both. All three switches default OFF. Disabling **Allow Zenyte networking** blocks new requests, including queued uploads and stop notifications. Live sharing also requires website consent.
 
 These options send regular recordings for recognised encounters to the fixed HTTPS zenyte.gg API. Completed uploads are public; live sharing broadcasts combat data including character names, gear and positions. Research files are never automatically transmitted. Local files remain available if the connection fails. Live sharing alone is not a saved website archive; enable automatic upload to save completed recordings there.
 

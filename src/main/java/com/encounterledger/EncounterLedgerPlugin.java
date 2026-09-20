@@ -304,7 +304,7 @@ public class EncounterLedgerPlugin extends Plugin
         writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> {
             Thread thread = new Thread(r, "encounter-ledger-writer"); thread.setDaemon(true); return thread;
         });
-        liveUploader=new LiveUploader(gson,this::notifyChat,httpClient);
+        liveUploader=new LiveUploader(gson,this::notifyChat,httpClient,config);
         liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());
         research=new ResearchRecorder(client,config,gson,writer,this::notifyChat,clientThread);
         eventBus.register(research);

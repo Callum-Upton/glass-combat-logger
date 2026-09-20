@@ -40,12 +40,12 @@ Automated tests cover recording boundaries, pre-roll, timer messages, combat obs
 
 ## Encounter boundaries
 
-Recognised Yama encounters remain active throughout template region 6045 (instance plane 0), including both Judge islands and stepping stones. Scurrius uses the recorded public/private template bounds x3276–3309, y9857–9878, plane 0. These rules keep an already-started encounter alive; they do not start recording on arena entry. Exiting a recognised area requires three observed outside ticks before saving, allowing delayed local-player death evidence to take precedence. Boss death still ends a kill while inside, so subsequent Scurrius spawns get separate logs. Unknown/unavailable area data retains the configurable idle fallback. Logout and the existing length/storage limits still apply.
+Recognised Yama encounters remain active throughout template region 6045 (instance plane 0), including both Judge islands and stepping stones. Scurrius uses the recorded public/private template bounds x3276Ã¢â‚¬â€œ3309, y9857Ã¢â‚¬â€œ9878, plane 0. These rules keep an already-started encounter alive; they do not start recording on arena entry. Exiting a recognised area requires three observed outside ticks before saving, allowing delayed local-player death evidence to take precedence. Boss death still ends a kill while inside, so subsequent Scurrius spawns get separate logs. Unknown/unavailable area data retains the configurable idle fallback. Logout and the existing length/storage limits still apply.
 
 
 ## Vorkath and generic weapon evidence (prepared update)
 
-The development Vorkath profile covers post-quest NPC 8061, including acid-phase continuity, final timer wait, spawn observations (8063), and acid object snapshots (32000). Instance-template viewport x2255–2289, y4048–4082, plane 0 is conservatively mapped; quest Vorkath is not claimed supported. The shared three-tick exit grace and player-death precedence apply.
+The development Vorkath profile covers post-quest NPC 8061, including acid-phase continuity, final timer wait, spawn observations (8063), and acid object snapshots (32000). Instance-template viewport x2255Ã¢â‚¬â€œ2289, y4048Ã¢â‚¬â€œ4082, plane 0 is conservatively mapped; quest Vorkath is not claimed supported. The shared three-tick exit grace and player-death precedence apply.
 
 Weapon-specific recognition and cooldown code are absent from production. Every non-idle local animation start with an NPC interaction preserves weapon ID/name, attack style, target, tick and client cycle as `attack_observation`. Duplicate callbacks at the same animation/cycle are suppressed. No weapon allowlist controls capture. Website interpretation may identify attacks later, including those from new weapons.
 
@@ -64,3 +64,7 @@ Zulrah (template regions 9007/9008), Duke Sucellus (12132) and Vardorvis (4405) 
 
 LiveUploader uses a bounded background queue, HTTP timeouts and no redirects. Research files are never transmitted. Live sharing requires both website consent and the plugin toggle. Revocation removes server access immediately. The user has confirmed successful live logging and automatic uploads. Vardorvis boundary tests pass, but dedicated live kill/death/exit validation remains outstanding.
 
+
+## Network opt-in boundary
+
+`allowNetworking` is a boolean ConfigItem defaulting to false with the exact Plugin Hub third-party-data warning. Every HTTP execution passes through `LiveUploader.executeRequest`, whose only statements are a fresh config check and `Call.execute()`. Request construction and response handling remain outside this boundary. Queued work checks current consent at execution, including stop requests. Existing in-flight requests cannot be unsent. The test transport has the same immediate guard. Live and upload toggles remain separately opt-in, and local recording does not require networking.

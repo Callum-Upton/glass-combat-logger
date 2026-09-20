@@ -5,6 +5,8 @@ import net.runelite.client.config.*;
 @ConfigGroup("encounterledger")
 public interface EncounterLedgerConfig extends Config
 {
+    @ConfigItem(keyName="allowNetworking", name="Allow Zenyte networking", description="Allow optional live logging and uploads to Zenyte. Disable to block all plugin network requests; local recording continues.", warning="This feature submits your IP address and various account data to a 3rd-party server not controlled or verified by Runelite developers.")
+    default boolean allowNetworking(){return false;}
     @ConfigItem(keyName="connectionKey",name="Plugin connection key",description="Generate in Zenyte account settings. Grants upload access only. Stored locally in RuneLite configuration; never included in recordings.",secret=true)
     default String connectionKey(){return "";}
     @ConfigItem(keyName="autoUpload",name="Automatically upload logs",description="Opt in: sends completed regular recordings to your Zenyte account as PUBLIC logs, including character names, gear and combat data. Local copies remain. Research files are not uploaded.")
@@ -25,3 +27,4 @@ public interface EncounterLedgerConfig extends Config
     @Range(min = 5, max = 100)
     default int idleTicks() { return 15; }
 }
+
