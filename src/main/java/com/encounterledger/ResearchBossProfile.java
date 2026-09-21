@@ -9,6 +9,7 @@ final class ResearchBossProfile implements BossProfile {
     static final ResearchBossProfile DUKE=new ResearchBossProfile("duke","Duke Sucellus",new int[]{12167,12191,12192},new int[]{12132},0);
     static final ResearchBossProfile PHOSANI=new ResearchBossProfile("phosanis_nightmare","Phosani's Nightmare",new int[]{377,9417,9418,9420,9421,9422,9424,11153,11154,11155},new int[]{15515},3);
     static final ResearchBossProfile VARDORVIS=new ResearchBossProfile("vardorvis","Vardorvis",new int[]{12223},new int[]{4405},0);
+    static final ResearchBossProfile GROTESQUE_GUARDIANS=new ResearchBossProfile("grotesque_guardians","Grotesque Guardians",new int[]{7851,7852,7853,7854,7855,7882,7883,7884,7885,7886,7887,7888,7889},new int[]{6727},0);
     private final String id,name;
     private final int[] npcs,regions;
     private final int plane;
@@ -16,7 +17,7 @@ final class ResearchBossProfile implements BossProfile {
     public String id(){return id;}
     public String name(){return name;}
     public boolean matches(int id){for(int n:npcs)if(n==id)return true;return false;}
-    static BossProfile forNpc(int id){for(ResearchBossProfile p:new ResearchBossProfile[]{ZULRAH,DUKE,PHOSANI,VARDORVIS})if(p.matches(id))return p;return null;}
+    static BossProfile forNpc(int id){for(ResearchBossProfile p:new ResearchBossProfile[]{ZULRAH,DUKE,PHOSANI,VARDORVIS,GROTESQUE_GUARDIANS})if(p.matches(id))return p;return null;}
     public boolean hasEncounterArea(){return true;}
     public boolean containsEncounterTile(WorldPoint p,boolean instanced){
         if(!instanced||p==null||p.getPlane()!=plane)return false;

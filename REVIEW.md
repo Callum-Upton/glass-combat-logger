@@ -68,3 +68,9 @@ LiveUploader uses a bounded background queue, HTTP timeouts and no redirects. Re
 ## Network opt-in boundary
 
 `allowNetworking` is a boolean ConfigItem defaulting to false with the exact Plugin Hub third-party-data warning. Every HTTP execution passes through `LiveUploader.executeRequest`, whose only statements are a fresh config check and `Call.execute()`. Request construction and response handling remain outside this boundary. Queued work checks current consent at execution, including stop requests. Existing in-flight requests cannot be unsent. The test transport has the same immediate guard. Live and upload toggles remain separately opt-in, and local recording does not require networking.
+
+## Grotesque Guardians capture
+
+Dawn and Dusk share one combat-triggered Grotesque Guardians profile (instanced template region 6727, plane zero). Normal phase and transition forms retain the encounter across quiet phases and individual NPC deaths. The shared kill-count message ends a completed fight; official duration can arrive afterward. Player death and three-tick arena exit retain their existing precedence and grace period. Combined research folders use the shared profile name. No new networking or website attribution logic is introduced here.
+
+Validation uses recorded arena/phase/completion observations and synthetic lifecycle tests, including transformation without further hits, long quiet transitions, delayed official timing, exit and player death during exit grace. A full live-client Guardians kill/death/exit test remains pending; the developer currently lacks a gargoyle Slayer task.

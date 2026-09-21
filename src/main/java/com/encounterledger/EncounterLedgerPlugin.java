@@ -374,7 +374,7 @@ public class EncounterLedgerPlugin extends Plugin
         if(research!=null&&config.combinedCapture()&&research.activeSessionId()==null
             &&!(self&&hit.getAmount()==10&&(consumables.hasDivineAttempt()||RecordingTrigger.divineUse(pending)))
             &&("damage_taken".equals(kind)||"damage_done".equals(kind)))
-            research.beginEncounter(encounterBoss!=null?encounterBoss.getName():recipient instanceof NPC?recipient.getName():client.getLocalPlayer().getInteracting() instanceof NPC?client.getLocalPlayer().getInteracting().getName():"PvM");
+            research.beginEncounter(profile()!=null?profile().name():encounterBoss!=null?encounterBoss.getName():recipient instanceof NPC?recipient.getName():client.getLocalPlayer().getInteracting() instanceof NPC?client.getLocalPlayer().getInteracting().getName():"PvM");
         Map<String,Object> damageEvent=object("kind", kind, "amount", hit.getAmount(), "hitsplatType", type, "recipient", actor(recipient),
             "ownership", self ? "incoming_source_unknown" : hit.isMine() ? "local_player" : "unattributed", "sequence", sequence++);
         if("damage_taken".equals(kind)) {
@@ -665,7 +665,7 @@ public class EncounterLedgerPlugin extends Plugin
         if (!reason.equals("boss_death")) encounterBoss = null;
         notifyChat("Recording stopped (" + reason.replace('_', ' ') + "). Saving "
             + ((List<?>) completed.get("ticks")).size() + " ticks...");
-        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && Arrays.asList("yama","vorkath","royal_titans","zulrah","duke","phosanis_nightmare","vardorvis").contains(((Map<?,?>)completed.get("boss")).get("id"))) {
+        if(reason.equals("boss_death") && !completed.containsKey("officialTiming") && completed.get("boss") instanceof Map && Arrays.asList("yama","vorkath","royal_titans","zulrah","duke","phosanis_nightmare","vardorvis","grotesque_guardians").contains(((Map<?,?>)completed.get("boss")).get("id"))) {
             flushTiming();awaitingTiming=completed;timingDeadline=client.getTickCount()+15;
         } else saveEncounter(completed);
         if(awaitingTiming!=completed && completed.containsKey("researchSessionId")&&research!=null)research.releaseEncounter();

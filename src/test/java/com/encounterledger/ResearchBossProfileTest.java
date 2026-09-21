@@ -5,8 +5,8 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ActorDeath;
 public class ResearchBossProfileTest {
  @Test public void boundariesUseInstancedTemplateRegions(){
-  ResearchBossProfile[] profiles={ResearchBossProfile.ZULRAH,ResearchBossProfile.DUKE,ResearchBossProfile.PHOSANI,ResearchBossProfile.VARDORVIS};
-  int[] ids={2042,12191,9418,12223},regions={9007,12132,15515,4405};
+  ResearchBossProfile[] profiles={ResearchBossProfile.ZULRAH,ResearchBossProfile.DUKE,ResearchBossProfile.PHOSANI,ResearchBossProfile.VARDORVIS,ResearchBossProfile.GROTESQUE_GUARDIANS};
+  int[] ids={2042,12191,9418,12223,7852},regions={9007,12132,15515,4405,6727};
   for(int i=0;i<profiles.length;i++){
    ResearchBossProfile p=profiles[i];assertSame(p,BossProfile.forNpc(ids[i]));
    WorldPoint tile=new WorldPoint((regions[i]>>8)*64+32,(regions[i]&255)*64+32,i==2?3:0);
@@ -29,7 +29,7 @@ public class ResearchBossProfileTest {
   assertEquals(1,h.plugin.saved.size());assertEquals("left_encounter",h.plugin.saved.get(0).get("endReason"));
  }
  @Test public void phaseDeathDoesNotSplitButCompletionAndExitDo()throws Exception{
-  for(int id:new int[]{2042,12191,9418,12223}){
+  for(int id:new int[]{2042,12191,9418,12223,7852,7888}){
    BossBoundaryTest.Harness h=new BossBoundaryTest.Harness();BossBoundaryTest.Enemy boss=new BossBoundaryTest.Enemy(id);
    h.target=boss.npc;h.plugin.area=true;h.hit(boss);h.tick();h.target=null;
    h.plugin.onActorDeath(new ActorDeath(boss.npc));for(int i=0;i<40;i++)h.tick();assertTrue(h.plugin.saved.isEmpty());
