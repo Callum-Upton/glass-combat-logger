@@ -56,9 +56,13 @@ final class LiveUploader {
             catch(Exception e){notify.accept("Automatic upload failed. Your local log is safe; upload it through My logs.");}
         });
     }
-    private void sendStop(String credential,String id){try{post("live",credential,gson.toJson(Map.of("stop",true,"recording",id)));}catch(Exception ignored){}}
+    private void sendStop(String credential,String id){
+        if(!config.allowNetworking())return;
+        try{post("live",credential,gson.toJson(Map.of("stop",true,"recording",id)));}catch(Exception ignored){}
+    }
     private boolean submit(Runnable task){try{queue.execute(task);return true;}catch(RejectedExecutionException e){notify.accept("Upload queue full. Local logs are safe; upload through My logs.");return false;}}
     private void post(String endpoint,String credential,String json)throws Exception{
+        if(!config.allowNetworking())throw new java.io.IOException("Zenyte networking is disabled");
         if(transport!=null){sendTestTransport(endpoint,credential,json);return;}
         Request request=new Request.Builder().url("https://zenyte.gg/api/plugin/"+endpoint)
             .header("Authorization","Bearer "+credential)

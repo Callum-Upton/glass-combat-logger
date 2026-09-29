@@ -46,4 +46,21 @@ public class LiveUploaderTest {
  }assertTrue(sent.isEmpty());allowed.set(true);post.invoke(u,"logs",key,"{}");assertEquals(1,sent.size());allowed.set(false);
  try{post.invoke(u,"live",key,"{\"stop\":true}");fail("Revoked HTTP must be rejected");}catch(java.lang.reflect.InvocationTargetException ex){assertTrue(ex.getCause() instanceof java.io.IOException);}assertEquals(1,sent.size());}finally{u.close();}
  }
+
+ @Test public void stopReturnsImmediatelyWhenNetworkingIsDisabled()throws Exception{
+ java.util.concurrent.atomic.AtomicInteger checks=new java.util.concurrent.atomic.AtomicInteger();
+ EncounterLedgerConfig config=new EncounterLedgerConfig(){public boolean allowNetworking(){checks.incrementAndGet();return false;}};
+ LiveUploader u=new LiveUploader(new Gson(),m->{},(e,k,j)->fail("Disabled stop must not send"),config);
+ java.lang.reflect.Method stop=LiveUploader.class.getDeclaredMethod("sendStop",String.class,String.class);stop.setAccessible(true);
+ try{stop.invoke(u,key,"recording");assertEquals("Stop must check consent before calling post",1,checks.get());}finally{u.close();}
+ }
+ @Test public void configureStopQueuedBeforeRevocationDoesNotReachHttp()throws Exception{
+ java.util.concurrent.atomic.AtomicBoolean allowed=new java.util.concurrent.atomic.AtomicBoolean(true);
+ EncounterLedgerConfig config=new EncounterLedgerConfig(){public boolean allowNetworking(){return allowed.get();}};
+ java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1),release=new java.util.concurrent.CountDownLatch(1);
+ List<okhttp3.Request> requests=new ArrayList<>();
+ okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().addInterceptor(chain->{requests.add(chain.request());entered.countDown();try{if(!release.await(3,java.util.concurrent.TimeUnit.SECONDS))throw new java.io.IOException("Test timed out");}catch(InterruptedException e){throw new java.io.IOException(e);}return new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK").body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("application/json"),"{}")).build();}).build();
+ LiveUploader u=new LiveUploader(new Gson(),m->{},client,config);
+ try{u.configure(key,true,false);u.tick(log());assertTrue(entered.await(3,java.util.concurrent.TimeUnit.SECONDS));u.configure(key,false,false);allowed.set(false);release.countDown();u.awaitIdle();assertEquals("Only the already-started batch may execute",1,requests.size());}finally{release.countDown();u.close();}
+ }
 }
