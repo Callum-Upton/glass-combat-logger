@@ -6,6 +6,17 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class PositionRecorderTest {
+    @Test public void explicitManualRaidCapturesUnknownActorsAndPeersWithoutChangingNormalScope(){
+        WorldView view=BossBoundaryTest.fake(WorldView.class,m->null);
+        Player local=BossBoundaryTest.fake(Player.class,m->m.equals("getWorldView")?view:m.equals("getWorldLocation")?new WorldPoint(3200,3200,0):null);
+        Player peer=BossBoundaryTest.fake(Player.class,m->m.equals("getWorldView")?view:m.equals("getWorldLocation")?new WorldPoint(3201,3200,0):m.equals("getName")?"Synthetic peer":null);
+        NPC npc=BossBoundaryTest.fake(NPC.class,m->m.equals("getWorldView")?view:m.equals("getWorldLocation")?new WorldPoint(3202,3200,0):m.equals("getId")?65000:m.equals("getName")?"Unknown actor":null);
+        Client client=BossBoundaryTest.fake(Client.class,m->m.equals("getNpcs")?Arrays.asList(npc):m.equals("getPlayers")?Arrays.asList(local,peer):null);
+        PositionRecorder r=new PositionRecorder();
+        assertFalse(r.snapshot(client,local,null).containsKey("players"));assertTrue(((List<?>)r.snapshot(client,local,null).get("npcs")).isEmpty());
+        Map<String,Object> frame=r.snapshot(client,local,null,true);
+        assertEquals(1,((List<?>)frame.get("players")).size());assertEquals(1,((List<?>)frame.get("npcs")).size());
+    }
     @Test public void titansWallsAreCapturedUntargetedAndRemovedWithTheScene() {
         WorldView view=BossBoundaryTest.fake(WorldView.class,m->null);
         Player player=BossBoundaryTest.fake(Player.class,m->m.equals("getWorldView")?view:m.equals("getWorldLocation")?new WorldPoint(2913,9569,0):null);

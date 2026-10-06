@@ -15,7 +15,7 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import net.runelite.client.ui.PluginPanel;
 
-/** Shows and copies the local recording path without opening external applications. */
+/** Recording shortcuts and a user-initiated link to the Zenyte website. */
 final class LogsPanel extends PluginPanel
 {
     LogsPanel(Path directory)
@@ -35,6 +35,10 @@ final class LogsPanel extends PluginPanel
         actions.add(path, BorderLayout.NORTH);
         JButton copy = new JButton("Copy folder path");
         actions.add(copy, BorderLayout.CENTER);
+        JButton website = new JButton("Open Zenyte.gg");
+        website.setToolTipText("Open https://zenyte.gg in your browser");
+        website.addActionListener(event -> net.runelite.client.util.LinkBrowser.browse("https://zenyte.gg"));
+        actions.add(website, BorderLayout.SOUTH);
         content.add(actions, BorderLayout.CENTER);
         JLabel status = new JLabel("<html>Paste this path into your file manager.<br>The folder appears after your first save.</html>");
         content.add(status, BorderLayout.SOUTH);

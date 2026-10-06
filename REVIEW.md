@@ -77,3 +77,17 @@ Validation uses recorded arena/phase/completion observations and synthetic lifec
 
 ## Stop-request consent review (29 September 2026)
 `sendStop` now returns immediately when networking is disabled, and `post` independently checks current consent before request preparation. The dedicated `executeRequest` and test-transport boundaries retain their final consent checks. This covers stop requests queued by a live-setting or key change as well as normal completion. Regression coverage includes disabling consent after a settings-change stop is queued behind an in-flight batch. 100 tests and the clean Gradle test/build pass; requests already in flight cannot be unsent.
+
+## Raid-launch readiness update (6 October 2026)
+
+Adds an opt-in, bounded data-only capture-rule downloader for The Fractured Archive. It uses the injected RuneLite HTTP client, a fixed HTTPS origin, no redirects, 10-second call timeout, 32 KiB response cap, strict schema, and at most seven-day validity. Networking remains disabled by default behind the existing exact-warning ConfigItem; every request checks current consent at the dedicated execution boundary. A connection key is required locally but is not sent by rule downloads. Downloading cannot change consent, enable research/uploads/live sharing, or execute remote code/regex/URLs. Diagnostic triggers require a separate default-off setting and never stream or auto-upload their logs. Real launch rules remain disabled until message and area evidence is available.
+
+Adds local provisional message settings and explicit manual raid research commands. Archive rules are pinned for an active recording; bounded 9,000-tick rollover parts share a session ID. Manual capture preserves rooms/deaths until explicit stop, disconnect, or rollover. Starting late does not establish an official timer.
+
+Initial Tombs of Amascut capture uses normalized instanced raid regions, continues across room changes and ordinary deaths, ends on the whole-raid total completion message or three outside ticks, and preserves Entry/Normal/Expert time evidence. Partial activation is explicit; region entry is not an official start time. Recorded Expert completion samples and synthetic lifecycle tests support the implementation; a complete live-client entrance/exit/rejoin test is still needed. No new ranking eligibility or damage attribution is asserted.
+
+Live upload reconnects after transient failures and restarts from tick zero only on the server's explicit restart response. Completed uploads retry transient failures at most six attempts with bounded queues; authentication and other permanent rejections do not retry indefinitely. Retries are memory-only; local recordings remain available if RuneLite exits. Networking is rechecked at execution and disabling it cancels queued retries.
+
+The settings are grouped by purpose, and the side panel has a user-clicked link to https://zenyte.gg using RuneLite LinkBrowser. It does not open a browser automatically. The existing developer launcher stays outside the production jar.
+
+Validation: clean Gradle test/build, 122 tests, plus website upload/restore and browser replay/privacy checks. In-game diagnostic start/stop messages, live logging and automatic uploads were tested by the developer. Actual Archive start/completion/exit rules must be established after release.

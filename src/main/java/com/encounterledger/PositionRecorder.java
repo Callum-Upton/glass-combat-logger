@@ -33,11 +33,14 @@ final class PositionRecorder {
         return snapshot(client,player,null);
     }
     Map<String,Object> snapshot(Client client,Player player,BossProfile profile) {
+        return snapshot(client,player,profile,false);
+    }
+    Map<String,Object> snapshot(Client client,Player player,BossProfile profile,boolean manualRaid) {
         List<Map<String,Object>> npcs=new ArrayList<>();
         List<NPC> visible=client.getNpcs();
         // Scaled raid NPCs can report level zero. Capture the loaded raid actors
         // independently of target selection; the usual view/range/cap checks still apply.
-        boolean activeRaid=client.getVarbitValue(CoxCapture.IN_RAID)==1
+        boolean activeRaid=manualRaid || client.getVarbitValue(CoxCapture.IN_RAID)==1
             && client.getVarbitValue(CoxCapture.RAID_STATE)>0;
         boolean truncated=false;
         if(visible!=null) for(NPC npc:visible) {
@@ -69,7 +72,7 @@ final class PositionRecorder {
         }
         Map<String,Object> result=map("coordinateSystem","instance_template","player",position(client,player),"npcs",npcs,"truncated",truncated);
         result.put("playerVisuals",ActorVisualSnapshot.capture(player,client.getGameCycle()));
-        if(participantScope(client,player,profile)) {
+        if(manualRaid || participantScope(client,player,profile)) {
             List<Map<String,Object>> participants=new ArrayList<>();boolean clipped=false;
             if(client.getPlayers()!=null)for(Player other:client.getPlayers()) {
                 if(other==player||other.getName()==null||other.getWorldView()!=player.getWorldView()||other.getWorldLocation()==null||other.getWorldLocation().distanceTo(player.getWorldLocation())>48)continue;

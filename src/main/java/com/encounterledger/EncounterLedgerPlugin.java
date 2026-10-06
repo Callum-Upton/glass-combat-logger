@@ -41,12 +41,26 @@ public class EncounterLedgerPlugin extends Plugin
     private net.runelite.client.util.HotkeyListener bookmarkListener;
     private net.runelite.client.util.HotkeyListener researchListener;
     private int lastResearchToggleTick=-1;
+    private final ManualRaidCapture manualRaid=new ManualRaidCapture();
+    private final RemoteRaidCapture remoteRaid=new RemoteRaidCapture();
+    private CaptureRuleClient captureRuleClient;
+    private int captureRegion() {
+        Player p=client.getLocalPlayer();
+        net.runelite.api.coords.WorldPoint point=p==null?null:positions.normalise(client,p.getWorldView(),p.getWorldLocation());
+        return point==null?-1:point.getRegionID();
+    }
+    private int capturePlane() {
+        Player p=client.getLocalPlayer();
+        net.runelite.api.coords.WorldPoint point=p==null?null:positions.normalise(client,p.getWorldView(),p.getWorldLocation());
+        return point==null?-1:point.getPlane();
+    }
     private void toggleResearchMode() {
         if(client.getGameState()!=GameState.LOGGED_IN || lastResearchToggleTick==client.getTickCount())return;
         lastResearchToggleTick=client.getTickCount();
         setResearchMode(config.combinedCapture()||config.researchMode()?"off":"on");
     }
     private void setResearchMode(String mode) {
+        if(mode.equals("off")&&manualRaid.active()){finish("manual_stop");manualRaid.reset();}
         boolean continuous="continuous".equals(mode);
         boolean enabled=!"off".equals(mode);
         configManager.setConfiguration("encounterledger","researchMode",continuous);
@@ -57,6 +71,23 @@ public class EncounterLedgerPlugin extends Plugin
     }
     @Subscribe public void onCommandExecuted(CommandExecuted event) {
         if(!"zenyte".equalsIgnoreCase(event.getCommand()))return;
+        String raidCommand=ManualRaidCapture.command(event.getArguments());
+        if(raidCommand!=null){
+            if("status".equals(raidCommand)&&remoteRaid.active()){notifyChat("Archive capture ON. Use ::zenyte raid stop to save an incomplete attempt.");return;}
+            if("status".equals(raidCommand)){notifyChat(manualRaid.active()?"Manual raid capture ON. Use ::zenyte raid stop when finished.":"Manual raid capture OFF.");return;}
+            if(client.getGameState()!=GameState.LOGGED_IN){notifyChat("Log in before changing raid capture.");return;}
+            if("stop".equals(raidCommand)){
+                if(remoteRaid.active()){finish("manual_stop");remoteRaid.reset();notifyChat("Archive recording stopped; no completion inferred.");return;}
+                if(manualRaid.active()){setResearchMode("off");notifyChat("Manual raid stopped; saving. No completion time is inferred.");}
+                else notifyChat("Manual raid capture is already OFF.");
+                return;
+            }
+            if(manualRaid.active()){notifyChat("Manual raid capture is already ON.");return;}
+            if(encounter!=null||remoteRaid.active()||cox.active||toa.active||(research!=null&&research.activeSessionId()!=null)){notifyChat("Finish the current recording or turn continuous research off before starting a manual raid.");return;}
+            setResearchMode("on");manualRaid.start();awaitingNextFight=false;encounterBoss=null;preCombat.clear();pending.clear();
+            notifyChat("Manual raid research ON: records across rooms, pauses and deaths, including nearby player names. Stop with ::zenyte raid stop. Long sessions save numbered parts.");
+            return;
+        }
         String mode=ResearchCommand.mode(event.getArguments());
         if(mode==null){notifyChat("Use ::zenyte research on, off, status, or continuous (diagnostics outside combat).");return;}
         if("status".equals(mode)){
@@ -109,6 +140,7 @@ public class EncounterLedgerPlugin extends Plugin
     private NPC encounterBoss;
     private boolean bossDeathPending, awaitingNextFight;
     private final CoxCapture cox = new CoxCapture();
+    private final ToaCapture toa = new ToaCapture();
     private String deathEvidence;
     private final ConsumableTracker consumables = new ConsumableTracker();
     private final Set<Projectile> seenProjectiles = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -154,6 +186,7 @@ public class EncounterLedgerPlugin extends Plugin
     }
 
     private BossProfile profile() {
+        if(manualRaid.active()||remoteRaid.active()||toa.active)return null;
         if (awaitingNextFight || storageFailed) return null;
         if (encounterBoss == null && client.getLocalPlayer() != null && client.getLocalPlayer().getInteracting() instanceof NPC) {
             NPC target = (NPC) client.getLocalPlayer().getInteracting();
@@ -199,11 +232,27 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Subscribe public void onChatMessage(ChatMessage event) {
         Instant messageReceivedAt=Instant.now();
+        boolean systemMessage=event.getType()==ChatMessageType.GAMEMESSAGE || event.getType()==ChatMessageType.SPAM || event.getType()==ChatMessageType.FRIENDSCHATNOTIFICATION;
+        if(systemMessage && client.getGameState()==GameState.LOGGED_IN && !storageFailed) {
+            if(remoteRaid.active()) {
+                remoteRaid.message(event.getMessage(),client.getTickCount());
+            } else if(encounter==null && !manualRaid.active() && !cox.active && !toa.active && client.getVarbitValue(CoxCapture.IN_RAID)!=1 && (config.archiveLocalTriggers()||captureRuleClient!=null)) {
+                CaptureRules rule=config.archiveLocalTriggers()?CaptureRules.local(config.archiveStartMessage(),config.archiveEndMessage()):captureRuleClient.current();
+                if(rule!=null && rule.starts(event.getMessage(),captureRegion(),capturePlane(),messageReceivedAt.getEpochSecond())) {
+                    remoteRaid.start(rule);awaitingNextFight=false;encounterBoss=null;bossDeathPending=false;
+                    pending.add(object("kind","raid_message","message",RaidLifecycleMessages.clean(event.getMessage()),"clientTick",client.getTickCount(),"sequence",sequence++));
+                }
+            }
+        }
         if (event.getType() == ChatMessageType.FRIENDSCHATNOTIFICATION && CoxCapture.recognized(event.getMessage())
-            && client.getVarbitValue(CoxCapture.IN_RAID)==1) {
+            && !remoteRaid.active() && client.getVarbitValue(CoxCapture.IN_RAID)==1) {
             cox.message(event.getMessage());
             KillTiming.observed(cox.timing,messageReceivedAt,client.getTickCount());
             pending.add(object("kind","raid_message","message",CoxCapture.clean(event.getMessage()),"clientTick",client.getTickCount(),"sequence",sequence++));
+        }
+        if((event.getType()==ChatMessageType.GAMEMESSAGE||event.getType()==ChatMessageType.SPAM)&&toa.active&&toa.message(event.getMessage(),client.getTickCount())) {
+            KillTiming.observed(toa.timing,messageReceivedAt,client.getTickCount());
+            pending.add(object("kind","raid_message","message",RaidLifecycleMessages.clean(event.getMessage()),"clientTick",client.getTickCount(),"sequence",sequence++));
         }
         if (event.getType() != ChatMessageType.GAMEMESSAGE && event.getType() != ChatMessageType.SPAM) return;
         if(encounter!=null && !awaitingNextFight && profile()!=null && profile().completionMessage(event.getMessage()))
@@ -282,7 +331,7 @@ public class EncounterLedgerPlugin extends Plugin
     {
         configManager.setConfiguration("encounterledger","researchMode",false);
         configManager.setConfiguration("encounterledger","combinedCapture",false);
-        lastBookmarkTick=-1; lastResearchToggleTick=-1; cox.reset();
+        lastBookmarkTick=-1; lastResearchToggleTick=-1; cox.reset();toa.reset();manualRaid.reset();remoteRaid.reset();
         bookmarkListener=new net.runelite.client.util.HotkeyListener(()->config.bookmarkHotkey()) {
             @Override public void hotkeyPressed(){clientThread.invoke(()->addBookmark());}
         };
@@ -304,6 +353,7 @@ public class EncounterLedgerPlugin extends Plugin
         writer = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8), r -> {
             Thread thread = new Thread(r, "encounter-ledger-writer"); thread.setDaemon(true); return thread;
         });
+        captureRuleClient=new CaptureRuleClient(config,httpClient,RuneLite.RUNELITE_DIR.toPath().resolve("encounter-ledger/capture-rules.json"));captureRuleClient.start();
         liveUploader=new LiveUploader(gson,this::notifyChat,httpClient,config);
         liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());
         research=new ResearchRecorder(client,config,gson,writer,this::notifyChat,clientThread);
@@ -312,6 +362,7 @@ public class EncounterLedgerPlugin extends Plugin
 
     @Override protected void shutDown()
     {
+        if(captureRuleClient!=null){captureRuleClient.close();captureRuleClient=null;}
         if(bookmarkListener!=null){keyManager.unregisterKeyListener(bookmarkListener);bookmarkListener=null;}
         if(researchListener!=null){keyManager.unregisterKeyListener(researchListener);researchListener=null;}
         if (logsNavigation != null) { clientToolbar.removeNavigation(logsNavigation); logsNavigation = null; }
@@ -467,7 +518,7 @@ public class EncounterLedgerPlugin extends Plugin
     {
         if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING || event.getGameState() == GameState.CONNECTION_LOST)
         {
-            finish(event.getGameState().name().toLowerCase(Locale.ROOT)); cox.reset(); flushTiming(); pending.clear(); preCombat.clear(); previousHp = -1;
+            finish(event.getGameState().name().toLowerCase(Locale.ROOT)); cox.reset();toa.reset(); manualRaid.reset(); remoteRaid.reset(); flushTiming(); pending.clear(); preCombat.clear(); previousHp = -1;
             consumables.clear(); seenProjectiles.clear(); seenGraphics.clear();
             spells.reset(); seenSpellGraphics.clear(); previousVengeance=-1;vengeanceTarget=null;targetVengeanceConfirmed=false;vengeanceOverhead=false;previousSpellState=null;
             encounterBoss = null; bossDeathPending = false; awaitingNextFight = false;
@@ -502,7 +553,9 @@ public class EncounterLedgerPlugin extends Plugin
         seenProjectiles.removeIf(projectile -> projectile.getEndCycle() < client.getGameCycle());
         seenGraphics.values().removeIf(start -> start < client.getGameCycle() - 1200);
         if (player == null || client.getGameState() != GameState.LOGGED_IN || storageFailed) { pending.clear(); preCombat.clear(); return; }
-        Boolean raidStart=cox.poll(client.getVarbitValue(CoxCapture.IN_RAID)==1,client.getVarbitValue(CoxCapture.RAID_STATE));
+        boolean toaStart=!manualRaid.active()&&!remoteRaid.active()&&!cox.active&&toa.poll(captureRegion(),client.isInInstancedRegion());
+        if(toaStart){if(encounter!=null)finish("raid_started");awaitingNextFight=false;encounterBoss=null;bossDeathPending=false;preCombat.clear();}
+        Boolean raidStart=(manualRaid.active()||remoteRaid.active()||toa.active)?null:cox.poll(client.getVarbitValue(CoxCapture.IN_RAID)==1,client.getVarbitValue(CoxCapture.RAID_STATE));
         if(raidStart!=null) {
             // Finish an unrelated generic recording before opening the raid session.
             if(encounter!=null) { finish("raid_started"); cox.active=true; }
@@ -541,7 +594,7 @@ public class EncounterLedgerPlugin extends Plugin
                 && BossProfile.forNpc(npc.getId())!=null && !npc.isDead()) { encounterBoss=npc; break; }
         }
         boolean captureAllowed=profile()!=null || config.combinedCapture() || config.researchMode();
-        if (encounter == null && (raidStart!=null || (combatEvent && captureAllowed && client.getVarbitValue(CoxCapture.IN_RAID)!=1)))
+        if (encounter == null && (toa.active || remoteRaid.active() || manualRaid.active() || raidStart!=null || (combatEvent && captureAllowed && client.getVarbitValue(CoxCapture.IN_RAID)!=1)))
         {
             flushTiming();observedParticipants.clear();
             ticks = new ArrayList<>();
@@ -555,6 +608,23 @@ public class EncounterLedgerPlugin extends Plugin
                 "combatStartTick",ticks.size(), "preCombatTicks",ticks.size(),
                 "timingBasis", "first_observed_damage_tick", "captureFeatures", Arrays.asList("attack_observations_v1", "shared_buffs_v1", "boss_events_v1", "item_use_v1", "player_spells_v1", "positions_v1", "named_participant_positions_v1", "glyph_positions_v1", "ground_hazards_v1", "projectile_paths_v1", "damage_cues_v1", "effect_lifecycle_v1", "actor_visual_snapshots_v1", "hazard_observations_at_hit_v1"));
             if(!ticks.isEmpty())encounter.put("startedAt",ticks.get(0).get("observedAt"));
+            if(manualRaid.active()){
+                encounter.put("label","Manual raid research");
+                encounter.put("manualRaidCapture",object("version",1,"sessionId",manualRaid.sessionId,"part",manualRaid.part,"boundaryEvidence","user_command"));
+                encounter.put("timingBasis","manual_capture_not_official_raid_time");
+            }
+            if(remoteRaid.active()) {
+                encounter.put("label","The Fractured Archive");
+                if(remoteRaid.rules.diagnostic){encounter.put("label","Capture trigger test");encounter.put("captureTest",true);}
+                else encounter.put("boss",object("id","fractured_archive","name","The Fractured Archive","profileVersion",1));
+                encounter.put("remoteRaidCapture",object("version",1,"ruleRevision",remoteRaid.rules.revision,"sessionId",remoteRaid.sessionId,"part",remoteRaid.part,"boundaryEvidence",remoteRaid.rules.localOverride()?"user_configured_system_message":"system_message_and_region"));
+                encounter.put("timingBasis","capture_start_not_official_raid_time");
+            }
+            if(toa.active){
+                encounter.put("label","Tombs of Amascut");encounter.put("boss",object("id","toa","name","Tombs of Amascut","profileVersion",1));
+                encounter.put("toaCapture",object("version",1,"sessionId",toa.sessionId,"part",toa.part,"entryObserved",toa.observedEntry&&toa.part==1,"boundaryEvidence","instance_template_region_entry"));
+                encounter.put("timingBasis","capture_start_not_official_raid_time");
+            }
             if(raidStart!=null) {
                 encounter.put("label","Chambers of Xeric");
                 encounter.put("boss",object("id","cox","name","Chambers of Xeric","profileVersion",1));
@@ -579,21 +649,39 @@ public class EncounterLedgerPlugin extends Plugin
                     encounter.put("combinedCaptureFromTick",ticks.size());
                 }
             }
-            BossProfile profile = profile();
+            BossProfile profile = manualRaid.active()?null:profile();
             if (profile != null && !cox.active) {
                 encounter.put("boss", object("id", profile.id(), "name", profile.name(), "npcId", encounterBoss.getId(), "profileVersion", 1));
                 encounter.put("label", profile.name());
             }
             ticks.add(snapshot(player,hp,spellState,profile,ticks.size()));
+            if(toa.active)ticks.get(ticks.size()-1).put("toaState",object("region",captureRegion(),"plane",capturePlane(),"raidLevel",client.getVarbitValue(14380)));
             if(cox.active)ticks.get(ticks.size()-1).put("raidState",object("inRaid",client.getVarbitValue(CoxCapture.IN_RAID),"state",client.getVarbitValue(CoxCapture.RAID_STATE)));
-            if(liveUploader!=null){liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());liveUploader.tick(encounter);}
+            if(liveUploader!=null&&!Boolean.TRUE.equals(encounter.get("captureTest"))){liveUploader.configure(config.connectionKey(),config.liveLogging(),config.autoUpload());liveUploader.tick(encounter);}
             displayedRecordedTick = ticks.size() - 1;
             tickRecording = true;
             Boolean inArea = cox.active ? Boolean.valueOf(client.getVarbitValue(CoxCapture.IN_RAID)==1) : encounterArea(player,profile);
             if(Boolean.FALSE.equals(inArea))outsideEncounterTicks++;
             else if(Boolean.TRUE.equals(inArea))outsideEncounterTicks=0;
             idle = combatEvent || engaged || Boolean.TRUE.equals(inArea) ? 0 : idle + 1;
-            if(cox.active) {
+            if(toa.active){
+                if(toa.timing!=null)encounter.put("officialTiming",toa.timing);
+                String reason=toa.endReason(client.getTickCount(),ticks.size());
+                if(reason!=null){if("raid_complete".equals(reason))encounter.put("endEvidence","toa_completion_message");finish(reason);}
+                playerDeathPending=false;bossDeathPending=false;
+            }
+            else if(remoteRaid.active()) {
+                if(remoteRaid.completionMessage!=null)encounter.put("raidCompletionMessage",remoteRaid.completionMessage);
+                String reason=remoteRaid.endReason(client.getTickCount(),captureRegion(),capturePlane(),ticks.size());
+                if(reason!=null){if("raid_complete".equals(reason))encounter.put("endEvidence","remote_rule_completion_message");finish(remoteRaid.rules.diagnostic&&"raid_complete".equals(reason)?"capture_test_complete":reason);}
+                playerDeathPending=false;bossDeathPending=false;
+            }
+            else if(manualRaid.active()) {
+                // Unknown boundaries: only explicit stop, disconnect or bounded rollover ends capture.
+                if(ticks.size()>=ManualRaidCapture.MAX_PART_TICKS)finish("length_limit");
+                playerDeathPending=false;bossDeathPending=false;
+            }
+            else if(cox.active) {
                 if(cox.layout!=null)encounter.put("raidLayout",cox.layout);
                 if(cox.complete) {
                     encounter.put("officialTiming",cox.timing);
@@ -640,7 +728,7 @@ public class EncounterLedgerPlugin extends Plugin
             for (Skill skill : Skill.values()) if (skill != Skill.OVERALL) skills.put(skill.name(), object("base", client.getRealSkillLevel(skill), "boosted", client.getBoostedSkillLevel(skill)));
             effectLifecycle.scan(client,player);
             return object("tick", tickIndex, "clientTick", client.getTickCount(), "observedAt", Instant.now().toString(),
-                "effectLifecycle",effectLifecycle.drain(), "hp", hp, "projectilePaths",projectilePositions.snapshot(client,player,profile,cox.active), "observedHazardProtection",hazards.protections(client,player,profile), "groundHazards",hazards.snapshot(client,player,profile),"spatial",positions.snapshot(client,player,profile),"spellState",spellState,"maxHp", client.getRealSkillLevel(Skill.HITPOINTS), "prayer", client.getBoostedSkillLevel(Skill.PRAYER),
+                "effectLifecycle",effectLifecycle.drain(), "hp", hp, "projectilePaths",projectilePositions.snapshot(client,player,profile,cox.active||manualRaid.active()||remoteRaid.active()||toa.active), "observedHazardProtection",hazards.protections(client,player,profile), "groundHazards",hazards.snapshot(client,player,profile),"spatial",positions.snapshot(client,player,profile,manualRaid.active()||remoteRaid.active()||toa.active),"spellState",spellState,"maxHp", client.getRealSkillLevel(Skill.HITPOINTS), "prayer", client.getBoostedSkillLevel(Skill.PRAYER),
                 "runEnergy", client.getEnergy(), "specialAttack", client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT),
                 "animationId", player.getAnimation(), "position", object("x", player.getWorldLocation().getX(), "y", player.getWorldLocation().getY(), "plane", player.getWorldLocation().getPlane()),
                 "target", actor(player.getInteracting()), "equipment", items(InventoryID.EQUIPMENT), "inventory", items(InventoryID.INVENTORY),
@@ -656,6 +744,9 @@ public class EncounterLedgerPlugin extends Plugin
         if (!pending.isEmpty() && !reason.equals("idle_timeout") && !reason.equals("player_death") && !reason.equals("length_limit") && !reason.equals("boss_death"))
             encounter.put("trailingEvents", new ArrayList<>(pending));
         Map<String, Object> completed = encounter; encounter = null; ticks = null;
+        if(completed.containsKey("toaCapture"))toa.finish(reason);
+        if(completed.containsKey("remoteRaidCapture"))remoteRaid.finish(reason);
+        if(completed.containsKey("manualRaidCapture"))manualRaid.finish(reason);
         if(completed.containsKey("raidCapture"))cox.ended();
         tickRecording = false;
         completed.put("trailingEffectLifecycle", effectLifecycle.drain());
@@ -687,7 +778,7 @@ public class EncounterLedgerPlugin extends Plugin
                     Files.write(temporary, json.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE_NEW);
                     try { Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE); }
                     catch (AtomicMoveNotSupportedException ex) { Files.move(temporary, destination); }
-                    if(uploader!=null && completed.containsKey("boss"))uploader.completed(json,String.valueOf(completed.get("id")));
+                    if(uploader!=null && !Boolean.TRUE.equals(completed.get("captureTest")) && completed.containsKey("boss"))uploader.completed(json,String.valueOf(completed.get("id")));
                     notifyChat("Log saved: " + (completed.containsKey("researchSessionId") ? "research/"+completed.getOrDefault("researchFolder",completed.get("researchSessionId"))+"/" : "") + destination.getFileName() + ". Ready to import into Zenyte.");
                 }
                 catch (Exception ex) { storageFailed = true; LOG.error("Zenyte could not save a log; recording paused until plugin restart", ex); notifyChat("Could not save the log. Recording paused; check your RuneLite log and restart the plugin after fixing storage."); }
@@ -709,5 +800,3 @@ public class EncounterLedgerPlugin extends Plugin
         else clientThread.invokeLater(notify);
     }
 }
-
-

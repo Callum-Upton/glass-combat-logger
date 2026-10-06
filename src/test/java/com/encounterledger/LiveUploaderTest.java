@@ -63,4 +63,42 @@ public class LiveUploaderTest {
  LiveUploader u=new LiveUploader(new Gson(),m->{},client,config);
  try{u.configure(key,true,false);u.tick(log());assertTrue(entered.await(3,java.util.concurrent.TimeUnit.SECONDS));u.configure(key,false,false);allowed.set(false);release.countDown();u.awaitIdle();assertEquals("Only the already-started batch may execute",1,requests.size());}finally{release.countDown();u.close();}
  }
+ @Test public void outageRecoversWithoutToggleAndUploadsRetry()throws Exception{
+ java.util.concurrent.atomic.AtomicInteger liveCalls=new java.util.concurrent.atomic.AtomicInteger(),uploads=new java.util.concurrent.atomic.AtomicInteger();
+ List<String> messages=new java.util.concurrent.CopyOnWriteArrayList<>();
+ LiveUploader u=new LiveUploader(new Gson(),messages::add,(e,k,j)->{if(e.equals("live")&&!j.contains("stop")&&liveCalls.incrementAndGet()==1)throw new java.io.IOException();if(e.equals("logs")&&uploads.incrementAndGet()==1)throw new LiveUploader.HttpFailure(503,false);},enabled);
+ u.retryBaseMillis=1;
+ try{u.configure(key,true,true);u.tick(log());u.awaitIdle();Thread.sleep(10);u.tick(log());u.awaitIdle();assertEquals(2,liveCalls.get());
+ u.completed("{}","recording");for(int i=0;i<100&&uploads.get()<2;i++)Thread.sleep(10);u.awaitIdle();assertEquals(2,uploads.get());assertTrue(messages.contains("Live connection restored."));assertTrue(messages.stream().anyMatch(m->m.contains("Fight uploaded")));}finally{u.close();}
+ }
+ @Test public void serverRestartReplaysFromZeroAndBusyKeepsSameBatch()throws Exception{
+ List<Integer> offsets=new java.util.concurrent.CopyOnWriteArrayList<>();
+ LiveUploader u=new LiveUploader(new Gson(),m->{},(e,k,j)->{if(j.contains("stop"))return;int from=new Gson().fromJson(j,com.google.gson.JsonObject.class).get("from").getAsInt();offsets.add(from);if(offsets.size()==2)throw new LiveUploader.HttpFailure(409,true);if(offsets.size()==3)throw new LiveUploader.HttpFailure(429,false);},enabled);u.retryBaseMillis=1;
+ try{u.configure(key,true,false);Map<String,Object> data=log();u.tick(data);u.awaitIdle();
+ @SuppressWarnings("unchecked") List<Map<String,Object>> ticks=(List<Map<String,Object>>)data.get("ticks");for(int i=10;i<20;i++)ticks.add(new LinkedHashMap<>(Map.of("tick",i)));
+ for(int i=0;i<3;i++){Thread.sleep(10);u.tick(data);u.awaitIdle();}assertEquals(Arrays.asList(0,10,0,0),offsets);}finally{u.close();}
+ }
+ @Test public void permanentRejectionsDoNotRetryAndTransientRetriesAreBounded()throws Exception{
+ for(int status:new int[]{401,400,409,503}){java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();List<String> messages=new java.util.concurrent.CopyOnWriteArrayList<>();
+ LiveUploader u=new LiveUploader(new Gson(),messages::add,(e,k,j)->{if(e.equals("logs")){calls.incrementAndGet();throw new LiveUploader.HttpFailure(status,false);}},enabled);u.retryBaseMillis=1;
+ try{u.configure(key,false,true);u.completed("{}","recording");for(int i=0;i<100&&messages.stream().noneMatch(m->m.contains("Automatic upload failed"));i++)Thread.sleep(10);u.awaitIdle();assertEquals(status==503?6:1,calls.get());assertTrue(messages.stream().anyMatch(m->m.contains("Automatic upload failed")));}finally{u.close();}}
+ }
+ @Test public void disablingUploadCancelsScheduledRetry()throws Exception{
+ java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();LiveUploader u=new LiveUploader(new Gson(),m->{},(e,k,j)->{if(e.equals("logs")){calls.incrementAndGet();throw new java.io.IOException();}},enabled);u.retryBaseMillis=100;
+ try{u.configure(key,false,true);u.completed("{}","recording");u.awaitIdle();u.configure(key,false,false);Thread.sleep(200);u.awaitIdle();assertEquals(1,calls.get());}finally{u.close();}
+ }
+ @Test public void liveToggleDoesNotCancelPendingUploadAndDuplicateCompletionIsIgnored()throws Exception{
+ java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+ LiveUploader u=new LiveUploader(new Gson(),m->{},(e,k,j)->{if(e.equals("logs")&&calls.incrementAndGet()==1)throw new java.io.IOException();},enabled);u.retryBaseMillis=100;
+ try{u.configure(key,true,true);u.completed("{}","recording");u.awaitIdle();u.completed("{}","recording");u.configure(key,false,true);
+ for(int i=0;i<100&&calls.get()<2;i++)Thread.sleep(10);u.awaitIdle();assertEquals(2,calls.get());}finally{u.close();}
+ }
+ @Test public void httpRestartCodeIsRecognizedButOtherConflictsArePermanent()throws Exception{
+ for(String body:Arrays.asList("{\"code\":\"LIVE_RESTART_REQUIRED\"}","{\"error\":\"Conflicting live batch.\"}")){
+ okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().addInterceptor(chain->new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(409).message("Conflict").body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("application/json"),body)).build()).build();
+ LiveUploader u=new LiveUploader(new Gson(),m->{},client,enabled);
+ java.lang.reflect.Method post=LiveUploader.class.getDeclaredMethod("post",String.class,String.class,String.class);post.setAccessible(true);
+ try{post.invoke(u,"live",key,"{}");fail("Expected conflict");}catch(java.lang.reflect.InvocationTargetException e){LiveUploader.HttpFailure error=(LiveUploader.HttpFailure)e.getCause();assertEquals(409,error.status);assertEquals(body.contains("LIVE_RESTART_REQUIRED"),error.restart);}finally{u.close();}
+ }
+ }
 }
